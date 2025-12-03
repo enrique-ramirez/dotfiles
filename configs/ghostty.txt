@@ -1,0 +1,11 @@
+background-blur = true
+background-opacity = 0.8
+initial-window = true
+keybind = global:ctrl+grave_accent=toggle_visibility
+shell-integration = zsh
+window-decoration = "auto"
+window-height = 1000
+window-position-x = 0
+window-position-y = 0
+window-save-state = always
+window-width = 1000
