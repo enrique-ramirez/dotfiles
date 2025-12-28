@@ -1,3 +1,6 @@
+# Ghostty Terminal Configuration
+# This file will be symlinked to ~/.config/ghostty/config
+
 background-blur = true
 background-opacity = 0.8
 initial-window = true

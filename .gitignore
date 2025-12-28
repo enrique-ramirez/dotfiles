@@ -1,0 +1,10 @@
+.DS_Store
+*.swp
+*.swo
+*~
+.backup
+*.backup
+*.backup.*
+*.old
+Brewfile.lock.json
+

@@ -1,0 +1,46 @@
+# Custom ZSH configuration - Personal preferences and aliases
+# Note: Tool-specific configurations (NVM, pnpm, gcloud) are added by their installers
+
+# ===== Oh My Zsh Plugins =====
+# Note: Oh My Zsh itself is configured in the main ~/.zshrc
+# These additional plugins enhance functionality
+plugins+=(
+  docker    # Docker command completions
+  node      # Node.js shortcuts
+  npm       # npm completions
+  nvm       # NVM completions
+  macos     # macOS-specific shortcuts
+  vscode    # VSCode shortcuts
+  z         # Jump to frequent directories
+)
+
+# ===== fzf Configuration =====
+# Enable fzf shell integration for fuzzy finding
+if command -v fzf &> /dev/null; then
+  source <(fzf --zsh)
+fi
+
+# ===== Custom Aliases =====
+# Navigation
+alias ls='ls -G'
+alias ll='ls -lah'
+alias ..='cd ..'
+alias ...='cd ../..'
+
+# Better commands
+alias cat='bat'     # bat has syntax highlighting
+alias grep='rg'     # ripgrep is faster
+
+# Git shortcuts (supplements gitconfig aliases)
+alias gst='git status'
+alias gco='git checkout'
+alias gcm='git commit'
+alias gaa='git add --all'
+alias gp='git push'
+alias gl='git pull'
+alias glog='git log --oneline --decorate --graph'
+
+# ===== Environment Variables =====
+export EDITOR='cursor --wait'
+export VISUAL='cursor'
+

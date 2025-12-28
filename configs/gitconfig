@@ -1,0 +1,44 @@
+[user]
+	name = Enrique Ramírez
+	email = hello@enrique-ramirez.com
+
+[core]
+	editor = cursor --wait
+	pager = diff-so-fancy | less --tabs=4 -RF
+
+[init]
+	defaultBranch = main
+
+[interactive]
+	diffFilter = diff-so-fancy --patch
+
+[alias]
+	co = checkout
+	br = branch
+	cm = commit
+	st = status
+	df = diff
+	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative
+	ll = log --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative
+
+[pull]
+	rebase = false
+
+[color]
+	ui = true
+
+[color "diff-highlight"]
+	oldNormal = red bold
+	oldHighlight = red bold 52
+	newNormal = green bold
+	newHighlight = green bold 22
+
+[color "diff"]
+	meta = 11
+	frag = magenta bold
+	func = 146 bold
+	commit = yellow bold
+	old = red bold
+	new = green bold
+	whitespace = red reverse
+
