@@ -30,7 +30,7 @@ else
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 fi
 
-# Install pnp
+# Install pnpm
 echo "\n- ${GREEN}pnpm${NC}"
 if command -v pnpm &> /dev/null; then
     echo "  Already installed!"
