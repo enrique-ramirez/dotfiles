@@ -1,11 +1,10 @@
 # Brewfile for automated Mac setup
 # Install with: brew bundle install
 
-# Taps
-tap "homebrew/bundle"
-tap "homebrew/cask-fonts"
+# ═══════════════════════════════════════════════════════════════════════════════
+# ESSENTIAL CLI TOOLS (Always installed)
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# CLI Tools
 brew "git"
 brew "bat"              # Better cat with syntax highlighting
 brew "fzf"              # Fuzzy finder
@@ -15,27 +14,60 @@ brew "wget"             # Download utility
 brew "tree"             # Directory structure viewer
 brew "jq"               # JSON processor
 brew "ripgrep"          # Better grep
-brew "postgresql@15"    # PostgreSQL database
+brew "eza"              # Modern replacement for ls (better than exa)
+brew "fd"               # Simple, fast alternative to find
+brew "tldr"             # Simplified man pages
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DEVELOPMENT TOOLS (Always installed)
+# ═══════════════════════════════════════════════════════════════════════════════
+
 brew "google-cloud-sdk" # Google Cloud Platform CLI
 
-# GUI Applications
-cask "google-chrome"
+# ═══════════════════════════════════════════════════════════════════════════════
+# ESSENTIAL APPLICATIONS (Always installed)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Development
 cask "visual-studio-code"
 cask "cursor"
+cask "ghostty"
+cask "docker"           # Docker Desktop (PostgreSQL etc. via containers)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECURITY & PASSWORDS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+cask "1password"        # Password manager (install first, has all your keys!)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BROWSERS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+cask "google-chrome"
+cask "zen-browser"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PRODUCTIVITY & COMMUNICATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
 cask "figma"
 cask "slack"
-cask "spotify"
-cask "1password"
+cask "clickup"
 cask "dropbox"
-cask "ghostty"
+cask "zoom"
 
-# Note: Some applications might not be available via Homebrew Cask
-# - Zen Browser: Install manually from https://zen-browser.app/download/
-# - Spark: Available on Mac App Store
-# - ClickUp: May need manual installation from https://clickup.com/download
+# ═══════════════════════════════════════════════════════════════════════════════
+# ENTERTAINMENT
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# Mac App Store applications (requires mas-cli)
-brew "mas"
-# mas "Xcode", id: 497799835
-# mas "Spark", id: 1176895641  # Uncomment if you want automatic installation
+cask "spotify"
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAC APP STORE (requires `mas` CLI and being signed into App Store)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+brew "mas"              # Mac App Store CLI
+
+mas "Spark – Email App by Readdle", id: 1176895641
+mas "Xcode", id: 497799835

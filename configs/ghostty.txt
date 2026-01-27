@@ -1,14 +1,36 @@
 # Ghostty Terminal Configuration
 # This file will be symlinked to ~/.config/ghostty/config
+#
+# IMPORTANT: For the global hotkey (Ctrl+`) to work:
+# 1. Ghostty must be running
+# 2. Grant Accessibility permissions: System Settings → Privacy & Security → Accessibility → Enable Ghostty
 
-background-blur = true
-background-opacity = 0.8
-initial-window = true
+# ═══════════════════════════════════════════════════════════════════════════════
+# Global Hotkey - Toggle Ghostty with Ctrl+` (backtick/grave accent)
+# ═══════════════════════════════════════════════════════════════════════════════
 keybind = global:ctrl+grave_accent=toggle_visibility
-shell-integration = zsh
-window-decoration = "auto"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Window Behavior
+# ═══════════════════════════════════════════════════════════════════════════════
+window-decoration = auto
+window-save-state = always
 window-height = 1000
+window-width = 1000
 window-position-x = 0
 window-position-y = 0
-window-save-state = always
-window-width = 1000
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Appearance
+# ═══════════════════════════════════════════════════════════════════════════════
+background-blur = true
+background-opacity = 0.8
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Shell Integration
+# ═══════════════════════════════════════════════════════════════════════════════
+shell-integration = zsh
+
+# Keep Ghostty running in background when all windows are closed
+# This allows the global hotkey to always work
+quit-after-last-window-closed = false

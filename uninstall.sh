@@ -22,11 +22,16 @@ if [ -L "$HOME/.config/ghostty/config" ]; then
     echo -e "  ${GREEN}✓${NC} Removed Ghostty config symlink"
 fi
 
+if [ -L "$HOME/.gitconfig" ]; then
+    rm "$HOME/.gitconfig"
+    echo -e "  ${GREEN}✓${NC} Removed gitconfig symlink"
+fi
+
 echo -e "\n${GREEN}Symlinks removed${NC}"
 
 # Ask about uninstalling packages
 echo ""
-read -p "$(echo -e ${YELLOW}Do you want to uninstall Homebrew packages? [y/N]:${NC} )" -n 1 -r
+read -p "$(echo -e "${YELLOW}Do you want to uninstall Homebrew packages? [y/N]:${NC} ")" -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo -e "${YELLOW}Uninstalling Homebrew packages...${NC}"

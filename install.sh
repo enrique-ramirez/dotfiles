@@ -5,6 +5,12 @@
 # Author: Enrique Ramírez
 # Description: Automated setup for new macOS computers
 # Usage: ./install.sh [--dry-run]
+#
+# BOOTSTRAP (run these on a fresh Mac - script handles the rest!):
+#   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/enrique-ramirez/dotfiles/main/install.sh)"
+#   OR if you have git:
+#   git clone https://github.com/enrique-ramirez/dotfiles ~/Projects/dotfiles
+#   cd ~/Projects/dotfiles && ./install.sh
 ###############################################################################
 
 set -e  # Exit on error
@@ -23,6 +29,11 @@ for arg in "$@"; do
             echo "Options:"
             echo "  --dry-run    Show what would be done without making changes"
             echo "  --help       Show this help message"
+            echo ""
+            echo "Bootstrap (fresh Mac):"
+            echo "  1. Run: xcode-select --install"
+            echo "  2. Wait for Command Line Tools to install"
+            echo "  3. Clone this repo and run ./install.sh"
             exit 0
             ;;
     esac
@@ -35,6 +46,7 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
+BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Dotfiles directory
@@ -51,6 +63,12 @@ print_header() {
     else
         echo -e "\n${BLUE}===${NC} ${GREEN}$1${NC} ${BLUE}===${NC}"
     fi
+}
+
+print_critical() {
+    echo -e "\n${RED}${BOLD}╔════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}${BOLD}║  ⚠️  CRITICAL: $1${NC}"
+    echo -e "${RED}${BOLD}╚════════════════════════════════════════════════════════════╝${NC}\n"
 }
 
 print_success() {
@@ -73,6 +91,10 @@ print_dry_run() {
     echo -e "  ${MAGENTA}[WOULD]${NC} $1"
 }
 
+print_link() {
+    echo -e "     ${CYAN}$1${NC}"
+}
+
 command_exists() {
     command -v "$1" &> /dev/null
 }
@@ -85,6 +107,20 @@ execute() {
     else
         eval "$*"
     fi
+}
+
+# Add line to file if not already present
+add_to_file_if_missing() {
+    local file="$1"
+    local search="$2"
+    local content="$3"
+
+    if ! grep -q "$search" "$file" 2>/dev/null; then
+        echo "" >> "$file"
+        echo "$content" >> "$file"
+        return 0
+    fi
+    return 1
 }
 
 ###############################################################################
@@ -107,7 +143,27 @@ if [[ "$OSTYPE" != "darwin"* ]]; then
     exit 1
 fi
 
+###############################################################################
+# Info: 1Password will be installed automatically
+###############################################################################
+
+print_header "1Password Info"
+echo -e "${CYAN}1Password will be installed automatically via Homebrew.${NC}"
+echo -e "${CYAN}After installation, you'll need to:${NC}"
+echo -e "  • Sign in to access your passwords and SSH keys"
+echo -e "  • Retrieve license keys for other software"
+echo -e "  • Configure browser extensions\n"
+
+if [ -d "/Applications/1Password.app" ] || [ -d "$HOME/Applications/1Password.app" ]; then
+    print_success "1Password is already installed"
+else
+    print_info "1Password will be installed shortly..."
+fi
+
+###############################################################################
 # Install Command Line Tools for Xcode
+###############################################################################
+
 print_header "Command Line Tools"
 if xcode-select -p &> /dev/null; then
     print_success "Already installed"
@@ -117,12 +173,24 @@ else
     else
         print_info "Installing Command Line Tools..."
         xcode-select --install
-        print_warning "Please complete the installation and run this script again"
-        exit 0
+
+        # Wait for installation to complete (lazy user friendly!)
+        print_info "Waiting for Command Line Tools installation..."
+        print_info "A dialog will appear - click 'Install' and wait."
+        echo ""
+
+        # Poll until xcode-select -p succeeds
+        until xcode-select -p &> /dev/null; do
+            sleep 5
+        done
+        print_success "Command Line Tools installed!"
     fi
 fi
 
+###############################################################################
 # Install Homebrew
+###############################################################################
+
 print_header "Homebrew"
 if command_exists brew; then
     print_success "Already installed"
@@ -138,19 +206,55 @@ else
         print_dry_run "Would add to PATH for Apple Silicon if needed"
     else
         print_info "Installing Homebrew..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-        # Add Homebrew to PATH for Apple Silicon Macs
+        # Add Homebrew to PATH for Apple Silicon Macs (for current session)
         if [[ $(uname -m) == "arm64" ]]; then
-            echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> "$ZSHRC_FILE"
             eval "$(/opt/homebrew/bin/brew shellenv)"
         fi
         print_success "Homebrew installed"
     fi
 fi
 
+# Ensure brew is in PATH for this session (Apple Silicon)
+if [[ $(uname -m) == "arm64" ]] && [ -f "/opt/homebrew/bin/brew" ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+fi
+
+###############################################################################
 # Install packages from Brewfile
+###############################################################################
+
 print_header "Installing packages from Brewfile"
+
+# Check Mac App Store sign-in (needed for mas to install Spark, Xcode)
+if [ "$DRY_RUN" = false ]; then
+    print_info "Checking Mac App Store sign-in status..."
+
+    # Install mas first to check sign-in
+    if ! command_exists mas; then
+        brew install mas
+    fi
+
+    if ! mas account &> /dev/null; then
+        echo ""
+        echo -e "${YELLOW}╔════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║  📱 Mac App Store Sign-In Required                         ║${NC}"
+        echo -e "${YELLOW}╠════════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${YELLOW}║  Some apps (Spark, Xcode) require the Mac App Store.       ║${NC}"
+        echo -e "${YELLOW}║  Please sign in to continue.                               ║${NC}"
+        echo -e "${YELLOW}╚════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        print_info "Opening Mac App Store..."
+        open -a "App Store"
+        echo ""
+        read -p "$(echo -e "${YELLOW}Press Enter once you have signed in to the App Store...${NC}")" -r
+        echo ""
+    else
+        print_success "Already signed into Mac App Store"
+    fi
+fi
+
 if [ -f "$DOTFILES_DIR/Brewfile" ]; then
     if [ "$DRY_RUN" = true ]; then
         print_info "Packages that would be installed:"
@@ -158,7 +262,7 @@ if [ -f "$DOTFILES_DIR/Brewfile" ]; then
             print_dry_run "$line"
         done
     else
-        print_info "Running brew bundle..."
+        print_info "Running brew bundle (this may take a while)..."
         cd "$DOTFILES_DIR"
         brew bundle install --no-lock
         print_success "All packages installed"
@@ -167,7 +271,72 @@ else
     print_warning "Brewfile not found at $DOTFILES_DIR/Brewfile"
 fi
 
+###############################################################################
+# Ghostty Setup (Early - for global hotkey ASAP)
+###############################################################################
+
+print_header "Ghostty Terminal Setup"
+
+# Setup Ghostty config first
+GHOSTTY_CONFIG_DIR="$HOME/.config/ghostty"
+if [ -f "$DOTFILES_DIR/configs/ghostty.txt" ]; then
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would setup Ghostty config"
+    else
+        mkdir -p "$GHOSTTY_CONFIG_DIR"
+        if [ -f "$GHOSTTY_CONFIG_DIR/config" ] || [ -L "$GHOSTTY_CONFIG_DIR/config" ]; then
+            # Backup existing config
+            mv "$GHOSTTY_CONFIG_DIR/config" "$GHOSTTY_CONFIG_DIR/config.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+        fi
+        ln -sf "$DOTFILES_DIR/configs/ghostty.txt" "$GHOSTTY_CONFIG_DIR/config"
+        print_success "Ghostty config linked"
+    fi
+fi
+
+# Check if Ghostty is installed and set it up for global hotkey
+if [ -d "/Applications/Ghostty.app" ] && [ "$DRY_RUN" = false ]; then
+    print_info "Ghostty is installed!"
+    echo ""
+    echo -e "${YELLOW}${BOLD}⚡ Global Hotkey Setup (Ctrl+\`)${NC}"
+    echo -e "For the global hotkey to work, Ghostty needs:"
+    echo -e "  1. ${BOLD}Accessibility permissions${NC} - macOS will prompt when Ghostty opens"
+    echo -e "  2. ${BOLD}Running in background${NC} - Configure 'Launch at Login' in Ghostty settings"
+    echo ""
+
+    # Add Ghostty to Login Items
+    print_info "Adding Ghostty to Login Items..."
+    osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/Ghostty.app", hidden:true}' 2>/dev/null && \
+        print_success "Ghostty will launch at login (hidden)" || \
+        print_warning "Could not add to Login Items - add manually in System Settings"
+
+    echo ""
+    read -p "$(echo -e "${YELLOW}Open Ghostty now to grant permissions? [Y/n]: ${NC}")" -n 1 -r
+    echo
+
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        print_info "Opening Ghostty..."
+        open -a Ghostty
+        echo ""
+        echo -e "${CYAN}╔════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${CYAN}║  When Ghostty opens, macOS will ask for Accessibility      ║${NC}"
+        echo -e "${CYAN}║  permissions. Click 'Open System Settings' and enable it. ║${NC}"
+        echo -e "${CYAN}║                                                            ║${NC}"
+        echo -e "${CYAN}║  After that, try pressing ${BOLD}Ctrl+\`${NC}${CYAN} to toggle Ghostty!      ║${NC}"
+        echo -e "${CYAN}╚════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        read -p "$(echo -e "${YELLOW}Press Enter once you have granted permissions...${NC}")" -r
+        print_success "Ghostty is ready with global hotkey!"
+    fi
+else
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would setup Ghostty global hotkey permissions"
+    fi
+fi
+
+###############################################################################
 # Install Oh My Zsh
+###############################################################################
+
 print_header "Oh My Zsh"
 if [ -d "$HOME/.oh-my-zsh" ]; then
     print_success "Already installed"
@@ -181,18 +350,82 @@ else
     fi
 fi
 
+###############################################################################
+# Configure Oh My Zsh plugins BEFORE sourcing
+# This modifies the plugins line in ~/.zshrc directly
+###############################################################################
+
+print_header "Oh My Zsh Plugins"
+if [ "$DRY_RUN" = true ]; then
+    print_dry_run "Would configure Oh My Zsh plugins"
+else
+    # Define the plugins we want
+    DESIRED_PLUGINS="git docker node npm nvm macos z"
+
+    if [ -f "$ZSHRC_FILE" ]; then
+        # Check if plugins line exists and update it
+        if grep -q "^plugins=" "$ZSHRC_FILE"; then
+            # Replace the plugins line with our desired plugins
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                sed -i '' "s/^plugins=.*/plugins=($DESIRED_PLUGINS)/" "$ZSHRC_FILE"
+            else
+                sed -i "s/^plugins=.*/plugins=($DESIRED_PLUGINS)/" "$ZSHRC_FILE"
+            fi
+            print_success "Plugins configured: $DESIRED_PLUGINS"
+        else
+            print_warning "plugins line not found in .zshrc"
+        fi
+    fi
+fi
+
+###############################################################################
+# Add Homebrew to .zshrc (for Apple Silicon)
+# MUST be done after Oh My Zsh install since it overwrites .zshrc
+###############################################################################
+
+print_header "Shell Configuration"
+if [[ $(uname -m) == "arm64" ]]; then
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would add Homebrew to PATH in .zshrc"
+    else
+        if ! grep -q 'eval "\$(/opt/homebrew/bin/brew shellenv)"' "$ZSHRC_FILE" 2>/dev/null; then
+            print_info "Adding Homebrew to PATH..."
+            # Add at the beginning of the file, right after the comments
+            {
+                echo ''
+                echo '# Homebrew (Apple Silicon)'
+                echo 'eval "$(/opt/homebrew/bin/brew shellenv)"'
+                echo ''
+                cat "$ZSHRC_FILE"
+            } > "$ZSHRC_FILE.tmp" && mv "$ZSHRC_FILE.tmp" "$ZSHRC_FILE"
+            print_success "Homebrew PATH added to .zshrc"
+        else
+            print_success "Homebrew already in PATH"
+        fi
+    fi
+fi
+
+###############################################################################
 # Install NVM
+###############################################################################
+
 print_header "NVM (Node Version Manager)"
 if [ -d "$HOME/.nvm" ]; then
     print_success "Already installed"
 else
     if [ "$DRY_RUN" = true ]; then
-        print_dry_run "Would install NVM"
+        print_dry_run "Would install NVM (latest version)"
         print_info "NVM installer would add configuration to ~/.zshrc"
     else
-        print_info "Installing NVM..."
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-        print_success "NVM installed"
+        print_info "Installing NVM (fetching latest version)..."
+        # Fetch and install latest NVM version dynamically
+        NVM_LATEST=$(curl -fsSL https://api.github.com/repos/nvm-sh/nvm/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        if [ -z "$NVM_LATEST" ]; then
+            NVM_LATEST="v0.40.3"  # Fallback if API fails
+            print_warning "Could not fetch latest NVM version, using $NVM_LATEST"
+        fi
+        curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_LATEST}/install.sh" | bash
+        print_success "NVM $NVM_LATEST installed"
         print_info "NVM has added its configuration to ~/.zshrc"
     fi
 fi
@@ -203,116 +436,235 @@ if [ "$DRY_RUN" = false ]; then
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 fi
 
+###############################################################################
 # Install Node.js LTS
+###############################################################################
+
 print_header "Node.js LTS"
+# Source NVM if not already loaded
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
 if command_exists node; then
     print_success "Node $(node --version) already installed"
 else
-    # Source NVM if not already loaded
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-    if command_exists nvm; then
-        print_info "Installing Node.js LTS..."
-        nvm install --lts
-        nvm use --lts
-        nvm alias default lts/*
-        print_success "Node.js LTS installed"
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would install Node.js LTS via NVM"
     else
-        print_warning "NVM not found, skipping Node.js installation"
+        if command_exists nvm; then
+            print_info "Installing Node.js LTS..."
+            nvm install --lts
+            nvm use --lts
+            nvm alias default lts/*
+            print_success "Node.js LTS installed"
+        else
+            print_warning "NVM not found, skipping Node.js installation"
+        fi
     fi
 fi
 
+###############################################################################
 # Install pnpm
+###############################################################################
+
 print_header "pnpm"
 if command_exists pnpm; then
     print_success "Already installed: $(pnpm --version)"
 else
-    print_info "Installing pnpm..."
-    curl -fsSL https://get.pnpm.io/install.sh | sh -
-    print_success "pnpm installed"
-    print_info "pnpm has added its configuration to ~/.zshrc"
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would install pnpm"
+    else
+        print_info "Installing pnpm..."
+        curl -fsSL https://get.pnpm.io/install.sh | sh -
+        print_success "pnpm installed"
+        print_info "pnpm has added its configuration to ~/.zshrc"
 
-    # Source pnpm for this session
-    export PNPM_HOME="$HOME/Library/pnpm"
-    export PATH="$PNPM_HOME:$PATH"
+        # Source pnpm for this session
+        export PNPM_HOME="$HOME/Library/pnpm"
+        export PATH="$PNPM_HOME:$PATH"
+    fi
 fi
 
-# Setup fzf shell integration
+###############################################################################
+# Setup fzf shell integration (modern method)
+###############################################################################
+
 print_header "fzf Shell Integration"
 if command_exists fzf; then
-    if grep -q "fzf --zsh" "$ZSHRC_FILE" 2>/dev/null; then
+    if grep -q 'source <(fzf --zsh)' "$ZSHRC_FILE" 2>/dev/null || grep -q 'fzf --zsh' "$ZSHRC_FILE" 2>/dev/null; then
         print_success "Already configured"
     else
-        print_info "Adding fzf integration to $ZSHRC_FILE..."
-        echo "" >> "$ZSHRC_FILE"
-        echo "# fzf shell integration" >> "$ZSHRC_FILE"
-        echo '[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh' >> "$ZSHRC_FILE"
-        print_success "fzf integration added"
+        if [ "$DRY_RUN" = true ]; then
+            print_dry_run "Would add fzf integration to .zshrc"
+        else
+            print_info "Adding fzf integration to $ZSHRC_FILE..."
+            echo "" >> "$ZSHRC_FILE"
+            echo "# fzf shell integration" >> "$ZSHRC_FILE"
+            echo 'source <(fzf --zsh)' >> "$ZSHRC_FILE"
+            print_success "fzf integration added"
+        fi
     fi
 else
     print_warning "fzf not installed, skipping integration"
 fi
 
+###############################################################################
 # Google Cloud SDK integration
+###############################################################################
+
 print_header "Google Cloud SDK"
 if [ -d "/opt/homebrew/share/google-cloud-sdk" ]; then
     if grep -q "google-cloud-sdk" "$ZSHRC_FILE" 2>/dev/null; then
         print_success "Already configured"
     else
-        print_info "Adding Google Cloud SDK to $ZSHRC_FILE..."
-        echo "" >> "$ZSHRC_FILE"
-        echo "# Google Cloud SDK" >> "$ZSHRC_FILE"
-        echo 'if [ -f "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc" ]; then' >> "$ZSHRC_FILE"
-        echo '  source "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc"' >> "$ZSHRC_FILE"
-        echo 'fi' >> "$ZSHRC_FILE"
-        echo 'if [ -f "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc" ]; then' >> "$ZSHRC_FILE"
-        echo '  source "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc"' >> "$ZSHRC_FILE"
-        echo 'fi' >> "$ZSHRC_FILE"
-        print_success "Google Cloud SDK configured"
+        if [ "$DRY_RUN" = true ]; then
+            print_dry_run "Would add Google Cloud SDK to .zshrc"
+        else
+            print_info "Adding Google Cloud SDK to $ZSHRC_FILE..."
+            echo "" >> "$ZSHRC_FILE"
+            echo "# Google Cloud SDK" >> "$ZSHRC_FILE"
+            echo 'if [ -f "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc" ]; then' >> "$ZSHRC_FILE"
+            echo '  source "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc"' >> "$ZSHRC_FILE"
+            echo 'fi' >> "$ZSHRC_FILE"
+            echo 'if [ -f "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc" ]; then' >> "$ZSHRC_FILE"
+            echo '  source "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc"' >> "$ZSHRC_FILE"
+            echo 'fi' >> "$ZSHRC_FILE"
+            print_success "Google Cloud SDK configured"
+        fi
     fi
 else
     print_info "Google Cloud SDK not installed (install via: brew install google-cloud-sdk)"
 fi
 
+###############################################################################
 # Configure git diff-so-fancy
+###############################################################################
+
 print_header "Git diff-so-fancy Configuration"
-if git config --global core.pager | grep -q "diff-so-fancy" 2>/dev/null; then
-    print_success "Already configured"
+if command_exists diff-so-fancy; then
+    if git config --global core.pager 2>/dev/null | grep -q "diff-so-fancy"; then
+        print_success "Already configured"
+    else
+        if [ "$DRY_RUN" = true ]; then
+            print_dry_run "Would configure git to use diff-so-fancy"
+        else
+            print_info "Configuring git to use diff-so-fancy..."
+            git config --global core.pager "diff-so-fancy | less --tabs=4 -RF"
+            git config --global interactive.diffFilter "diff-so-fancy --patch"
+            print_success "diff-so-fancy configured"
+        fi
+    fi
 else
-    print_info "Configuring git to use diff-so-fancy..."
-    git config --global core.pager "diff-so-fancy | less --tabs=4 -RF"
-    git config --global interactive.diffFilter "diff-so-fancy --patch"
-    print_success "diff-so-fancy configured"
+    print_warning "diff-so-fancy not installed, skipping configuration"
 fi
 
+###############################################################################
 # Git configuration
-print_header "Git Configuration"
-if [ "$DRY_RUN" = true ]; then
-    print_dry_run "Would configure git user.name: Enrique Ramírez"
-    print_dry_run "Would configure git user.email: hello@enrique-ramirez.com"
-    print_dry_run "Would configure git editor: cursor --wait"
-    print_dry_run "Would configure git default branch: main"
-    print_dry_run "Would add git aliases (co, br, cm, st, df, lg, ll)"
-else
-    print_info "Configuring git..."
-    git config --global user.name "Enrique Ramírez"
-    git config --global user.email "hello@enrique-ramirez.com"
-    git config --global core.editor "cursor --wait"
-    git config --global init.defaultBranch "main"
+###############################################################################
 
-    # Git aliases
-    git config --global alias.co "checkout"
-    git config --global alias.br "branch"
-    git config --global alias.cm "commit"
-    git config --global alias.st "status"
-    git config --global alias.df "diff"
-    git config --global alias.lg "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative"
-    git config --global alias.ll "log --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative"
-    print_success "Git configured"
+print_header "Git Configuration"
+GITCONFIG_SRC="$DOTFILES_DIR/configs/gitconfig"
+GITCONFIG_DST="$HOME/.gitconfig"
+
+if [ "$DRY_RUN" = true ]; then
+    print_dry_run "Would symlink gitconfig from dotfiles"
+else
+    if [ -f "$GITCONFIG_SRC" ]; then
+        # Backup existing gitconfig if it's a regular file (not a symlink)
+        if [ -f "$GITCONFIG_DST" ] && [ ! -L "$GITCONFIG_DST" ]; then
+            mv "$GITCONFIG_DST" "$GITCONFIG_DST.backup.$(date +%Y%m%d_%H%M%S)"
+            print_info "Backed up existing .gitconfig"
+        fi
+        # Remove existing symlink if pointing elsewhere
+        if [ -L "$GITCONFIG_DST" ]; then
+            rm "$GITCONFIG_DST"
+        fi
+        ln -sf "$GITCONFIG_SRC" "$GITCONFIG_DST"
+        print_success "Git configured (symlinked from dotfiles)"
+    else
+        print_warning "gitconfig not found at $GITCONFIG_SRC, configuring manually..."
+        git config --global user.name "Enrique Ramírez"
+        git config --global user.email "hello@enrique-ramirez.com"
+        git config --global core.editor "cursor --wait"
+        git config --global init.defaultBranch "main"
+        print_success "Git configured"
+    fi
 fi
 
+###############################################################################
+# SSH Key Setup for GitHub
+###############################################################################
+
+print_header "SSH Key for GitHub"
+
+SSH_KEY_PATH="$HOME/.ssh/id_ed25519"
+SSH_KEY_PUB="$HOME/.ssh/id_ed25519.pub"
+
+if [ -f "$SSH_KEY_PATH" ]; then
+    print_success "SSH key already exists at $SSH_KEY_PATH"
+    print_info "Your public key:"
+    echo ""
+    cat "$SSH_KEY_PUB"
+    echo ""
+else
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would generate SSH key at $SSH_KEY_PATH"
+        print_dry_run "Would add SSH key to ssh-agent"
+    else
+        print_info "No SSH key found. Creating one now."
+        echo ""
+
+        read -p "$(echo -e "${YELLOW}Generate a new SSH key for GitHub? [Y/n]: ${NC}")" -n 1 -r
+        echo
+
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            # Create .ssh directory if it doesn't exist
+            mkdir -p "$HOME/.ssh"
+            chmod 700 "$HOME/.ssh"
+
+            # Generate SSH key
+            print_info "Generating SSH key..."
+            ssh-keygen -t ed25519 -C "hello@enrique-ramirez.com" -f "$SSH_KEY_PATH" -N ""
+
+            # Start ssh-agent and add key
+            eval "$(ssh-agent -s)" > /dev/null
+
+            # Create or update SSH config
+            SSH_CONFIG="$HOME/.ssh/config"
+            if [ ! -f "$SSH_CONFIG" ] || ! grep -q "Host github.com" "$SSH_CONFIG"; then
+                echo "" >> "$SSH_CONFIG"
+                echo "Host github.com" >> "$SSH_CONFIG"
+                echo "  AddKeysToAgent yes" >> "$SSH_CONFIG"
+                echo "  UseKeychain yes" >> "$SSH_CONFIG"
+                echo "  IdentityFile $SSH_KEY_PATH" >> "$SSH_CONFIG"
+                chmod 600 "$SSH_CONFIG"
+            fi
+
+            # Add key to ssh-agent with keychain
+            ssh-add --apple-use-keychain "$SSH_KEY_PATH" 2>/dev/null || ssh-add "$SSH_KEY_PATH"
+
+            print_success "SSH key generated!"
+            echo ""
+            print_info "Your public key (copy this to GitHub):"
+            echo ""
+            echo -e "${CYAN}$(cat "$SSH_KEY_PUB")${NC}"
+            echo ""
+            print_info "Add this key to GitHub:"
+            print_link "https://github.com/settings/ssh/new"
+            echo ""
+
+            read -p "$(echo -e "${YELLOW}Press Enter once you have added the key to GitHub...${NC}")" -r
+        else
+            print_warning "Skipping SSH key generation"
+            print_info "You can generate one later with: ssh-keygen -t ed25519 -C \"your@email.com\""
+        fi
+    fi
+fi
+
+###############################################################################
 # Create Projects directory
+###############################################################################
+
 print_header "Projects Directory"
 if [ -d "$HOME/Projects" ]; then
     print_success "Already exists"
@@ -326,29 +678,16 @@ else
     fi
 fi
 
+###############################################################################
 # Setup config files
+###############################################################################
+
 print_header "Configuration Files"
 print_info "Setting up configuration files..."
 
-# Ghostty config
-GHOSTTY_CONFIG_DIR="$HOME/.config/ghostty"
-if [ -f "$DOTFILES_DIR/configs/ghostty.txt" ]; then
-    if [ "$DRY_RUN" = true ]; then
-        if [ -f "$GHOSTTY_CONFIG_DIR/config" ] || [ -L "$GHOSTTY_CONFIG_DIR/config" ]; then
-            print_dry_run "Would backup existing Ghostty config"
-        fi
-        print_dry_run "Would symlink $DOTFILES_DIR/configs/ghostty.txt → ~/.config/ghostty/config"
-    else
-        mkdir -p "$GHOSTTY_CONFIG_DIR"
-        if [ -f "$GHOSTTY_CONFIG_DIR/config" ] || [ -L "$GHOSTTY_CONFIG_DIR/config" ]; then
-            print_warning "Ghostty config already exists, backing up..."
-            mv "$GHOSTTY_CONFIG_DIR/config" "$GHOSTTY_CONFIG_DIR/config.backup.$(date +%Y%m%d_%H%M%S)"
-        fi
-        ln -s "$DOTFILES_DIR/configs/ghostty.txt" "$GHOSTTY_CONFIG_DIR/config"
-        print_success "Ghostty config linked"
-    fi
-else
-    print_warning "Ghostty config not found at $DOTFILES_DIR/configs/ghostty.txt"
+# Ghostty config (already set up earlier, just verify)
+if [ -L "$HOME/.config/ghostty/config" ]; then
+    print_success "Ghostty config already linked"
 fi
 
 # Source custom aliases and preferences from dotfiles
@@ -394,26 +733,47 @@ if [ "$DRY_RUN" = true ]; then
 fi
 
 print_header "Installation Complete! 🎉"
-echo -e "\n${GREEN}Your Mac is now set up!${NC}\n"
+echo -e "\n${GREEN}Your Mac is now set up with development tools!${NC}\n"
 
-print_info "Next steps:"
-echo -e "  1. Restart your terminal or run: ${CYAN}source ~/.zshrc${NC}"
-echo -e "  2. Install Node.js LTS: ${CYAN}nvm install --lts${NC}"
-echo -e "  3. Check manual installations needed:"
-echo -e "     - Zen Browser: https://zen-browser.app/download/"
-echo -e "     - ClickUp: https://clickup.com/download"
-echo -e "     - Spark: Mac App Store"
-echo -e "     - Xcode: Mac App Store (if needed)"
+###############################################################################
+# Post-Installation Summary
+###############################################################################
+
+echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║              📦 Installed Applications                    ║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}\n"
+
+echo -e "${GREEN}All applications were installed automatically via Homebrew!${NC}\n"
+
+echo -e "${CYAN}Installed:${NC}"
+echo -e "   ✓ 1Password, Chrome, Zen Browser"
+echo -e "   ✓ VS Code, Cursor, Ghostty, Docker"
+echo -e "   ✓ Figma, Slack, ClickUp, Dropbox, Zoom"
+echo -e "   ✓ Spotify"
+echo -e "   ✓ Spark, Xcode (from Mac App Store)\n"
+
+###############################################################################
+# Next Steps
+###############################################################################
+
+echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║                    📋 Next Steps                          ║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}\n"
+
+echo -e "  1. ${BOLD}Restart your terminal${NC} or run: ${CYAN}source ~/.zshrc${NC}"
+echo -e "  2. ${BOLD}Add SSH key to GitHub${NC} (if not done): ${CYAN}https://github.com/settings/ssh/new${NC}"
+echo -e "  3. ${BOLD}Configure Ghostty${NC}: Settings are already linked from dotfiles"
+echo -e "  4. ${BOLD}Install optional apps${NC} from the links above\n"
 
 # Optional OS update
 echo ""
-read -p "$(echo -e ${YELLOW}Do you want to update macOS now? [y/N]:${NC} )" -n 1 -r
+read -p "$(echo -e "${YELLOW}Do you want to update macOS now? [y/N]:${NC}")" -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     print_info "Checking for macOS updates..."
     softwareupdate -l
     echo ""
-    read -p "$(echo -e ${YELLOW}Install all available updates? [y/N]:${NC} )" -n 1 -r
+    read -p "$(echo -e "${YELLOW}Install all available updates? [y/N]:${NC}")" -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         print_info "Installing updates (this may take a while)..."
@@ -423,4 +783,3 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 fi
 
 echo -e "\n${GREEN}Enjoy your new setup!${NC} 🚀\n"
-

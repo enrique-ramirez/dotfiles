@@ -24,9 +24,11 @@ if [ -f "$HOME/.zshrc" ]; then
     echo -e "${GREEN}✓${NC} Backed up .zshrc"
 fi
 
-if [ -f "$HOME/.gitconfig" ]; then
+if [ -f "$HOME/.gitconfig" ] && [ ! -L "$HOME/.gitconfig" ]; then
     cp "$HOME/.gitconfig" "$BACKUP_DIR/gitconfig"
     echo -e "${GREEN}✓${NC} Backed up .gitconfig"
+elif [ -L "$HOME/.gitconfig" ]; then
+    echo -e "${CYAN}→${NC} Skipped .gitconfig (is a symlink)"
 fi
 
 if [ -f "$HOME/.config/ghostty/config" ]; then

@@ -52,8 +52,9 @@ print_success "Cleanup complete"
 # Update Oh My Zsh
 print_header "Updating Oh My Zsh"
 if [ -d "$HOME/.oh-my-zsh" ]; then
-    cd "$HOME/.oh-my-zsh"
-    git pull
+    # Use the official OMZ update command (not git pull!)
+    zsh -ic 'omz update --unattended' 2>/dev/null || \
+        (cd "$HOME/.oh-my-zsh" && git pull --rebase --autostash)
     print_success "Oh My Zsh updated"
 else
     print_info "Oh My Zsh not installed"
@@ -80,7 +81,12 @@ fi
 # Update pnpm
 print_header "Updating pnpm"
 if command -v pnpm &> /dev/null; then
-    pnpm add -g pnpm
+    # Use corepack if available (Node 16.10+), otherwise pnpm self-update
+    if command -v corepack &> /dev/null; then
+        corepack prepare pnpm@latest --activate 2>/dev/null || pnpm self-update
+    else
+        pnpm self-update 2>/dev/null || curl -fsSL https://get.pnpm.io/install.sh | sh -
+    fi
     print_success "pnpm updated to: $(pnpm --version)"
 else
     print_info "pnpm not installed"
@@ -92,7 +98,7 @@ print_info "Checking for macOS updates..."
 softwareupdate -l
 
 echo ""
-read -p "$(echo -e ${YELLOW}Install macOS updates now? [y/N]:${NC} )" -n 1 -r
+read -p "$(echo -e "${YELLOW}Install macOS updates now? [y/N]:${NC} ")" -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     print_info "Installing updates (this may take a while)..."
