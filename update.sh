@@ -25,6 +25,10 @@ print_info() {
     echo -e "  ${CYAN}→${NC} $1"
 }
 
+print_warning() {
+    echo -e "  ${YELLOW}⚠${NC} $1"
+}
+
 echo -e "\n${YELLOW}Updating your Mac! 🔄${NC}\n"
 
 # Update Homebrew

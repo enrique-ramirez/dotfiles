@@ -1,22 +1,10 @@
 # Dotfiles
 
-Automated setup for new macOS computers. Installs development tools, CLI utilities, and personal configurations.
-
-## ⚠️ Before You Start
-
-### 🔐 1Password is CRITICAL
-
-**Install 1Password first!** It holds all your passwords and SSH keys. You'll need it to:
-
-- Log into your accounts (GitHub, email, etc.)
-- Access SSH keys for git authentication
-- Retrieve license keys for other software
-
-👉 **Download:** https://1password.com/downloads/mac/
+Automated setup for new macOS computers. Installs development tools, CLI utilities, applications, and personal configurations.
 
 ## Quick Start (Fresh Mac)
 
-On a **brand new Mac**, you need to bootstrap first since `git` isn't available:
+On a **brand new Mac**, you need Command Line Tools before you can clone:
 
 ```bash
 # Step 1: Install Command Line Tools (required for git)
@@ -25,67 +13,100 @@ xcode-select --install
 # Step 2: Wait for the installation dialog to complete...
 
 # Step 3: Clone and run
-git clone https://github.com/YOUR_USER/dotfiles ~/Projects/dotfiles
+git clone https://github.com/enrique-ramirez/dotfiles ~/Projects/dotfiles
 cd ~/Projects/dotfiles
 ./install.sh
 ```
 
-If you already have the repo (e.g., on a USB drive):
+**Alternative:** Copy the repo to a USB drive and run directly:
 
 ```bash
 cd /path/to/dotfiles
 ./install.sh
 ```
 
-## What This Does
+> 💡 **Tip:** Run `./install.sh --dry-run` first to preview what will happen!
 
-### Development Tools
-- **Homebrew** - Package manager
-- **Oh My Zsh** - Enhanced shell with plugins (git, docker, node, npm, nvm, macos, z)
-- **NVM** + Node.js LTS - Node version manager
-- **pnpm** - Fast package manager
-- **Git** - Version control with custom aliases
+## What Gets Installed
 
-### CLI Utilities
-- bat, fzf, tig, ripgrep, tree, jq, wget, diff-so-fancy
+### 🛠️ CLI Tools (via Homebrew)
 
-### Applications (via Homebrew)
-- **Essential:** VSCode, Cursor, Ghostty
-- **Database:** PostgreSQL
-- **Cloud:** Google Cloud SDK
+| Tool | Description |
+|------|-------------|
+| `bat` | Better `cat` with syntax highlighting |
+| `fzf` | Fuzzy finder for files and history |
+| `ripgrep` | Better `grep` (aliased as `grep`) |
+| `fd` | Better `find` (aliased as `find`) |
+| `eza` | Modern `ls` replacement with icons |
+| `tree` | Directory structure viewer |
+| `jq` | JSON processor |
+| `tig` | Text-mode git interface |
+| `tldr` | Simplified man pages |
+| `diff-so-fancy` | Better git diffs |
+| `wget` | Download utility |
 
-### Configurations
-- Custom shell aliases and preferences
-- Git configuration and aliases
-- Ghostty terminal configuration
+### 💻 Applications (via Homebrew Casks)
+
+**Development:**
+- VS Code, Cursor, Ghostty, Docker
+
+**Security:**
+- 1Password
+
+**Browsers:**
+- Google Chrome, Zen Browser
+
+**Productivity:**
+- Figma, Slack, ClickUp, Dropbox, Zoom
+
+**Entertainment:**
+- Spotify
+
+**Mac App Store** (requires sign-in):
+- Spark (email), Xcode
+
+### ⚙️ Development Environment
+
+- **Homebrew** — Package manager
+- **Oh My Zsh** — Enhanced shell with plugins (git, docker, node, npm, nvm, macos, z)
+- **NVM** — Node version manager (installs latest LTS)
+- **pnpm** — Fast package manager
+- **Google Cloud SDK** — GCP CLI tools
+
+### 📝 Configurations
+
+- Git config with aliases and diff-so-fancy
+- Ghostty terminal with global hotkey (`Ctrl+\``)
+- Shell aliases (see `configs/zshrc`)
 - SSH key generation for GitHub
-- Tool integrations (fzf, gcloud)
+- fzf and gcloud shell integrations
 
 ## Usage
 
-### Initial Setup
+### Scripts
+
 ```bash
 ./install.sh          # Full installation
-./install.sh --dry-run # Preview without changes
+./install.sh --dry-run # Preview without making changes
 ./install.sh --help   # Show help
-```
 
-### Keep Updated
-```bash
 ./update.sh           # Update all packages and tools
 ./backup.sh           # Backup current configurations
+./uninstall.sh        # Remove symlinks and optionally packages
 ```
 
-### Customize
+### Customization
 
-**Add packages:** Edit `Brewfile`, then run:
+**Add/remove packages:** Edit `Brewfile`, then run:
 ```bash
 brew bundle install
 ```
 
 **Change shell aliases:** Edit `configs/zshrc`
 
-**Change git settings:** Edit `configs/gitconfig` or `install.sh`
+**Change git settings:** Edit `configs/gitconfig`
+
+**Change terminal settings:** Edit `configs/ghostty.txt`
 
 ## File Structure
 
@@ -94,41 +115,17 @@ dotfiles/
 ├── install.sh          # Main installation script
 ├── update.sh           # Update all packages
 ├── backup.sh           # Backup configurations
-├── Brewfile            # Package definitions
-├── configs/
-│   ├── zshrc           # Shell configuration (aliases, env vars)
-│   ├── gitconfig       # Git configuration
-│   └── ghostty.txt     # Terminal configuration
-└── docs/               # Additional documentation
+├── uninstall.sh        # Uninstall script
+├── Brewfile            # Homebrew packages
+└── configs/
+    ├── zshrc           # Shell aliases and env vars
+    ├── gitconfig       # Git configuration
+    └── ghostty.txt     # Ghostty terminal config
 ```
-
-## Optional Applications
-
-These apps are **not auto-installed** to avoid potential failures on different systems. Download them manually as needed:
-
-### 🔐 Critical - Install First
-- **1Password:** https://1password.com/downloads/mac/
-
-### 🌐 Browsers
-- **Google Chrome:** https://www.google.com/chrome/
-- **Zen Browser:** https://zen-browser.app/download/
-
-### 💼 Productivity
-- **Figma:** https://www.figma.com/downloads/
-- **Slack:** https://slack.com/downloads/mac
-- **ClickUp:** https://clickup.com/download
-- **Dropbox:** https://www.dropbox.com/install
-- **Spark:** Mac App Store
-
-### 🎵 Entertainment
-- **Spotify:** https://www.spotify.com/download/mac/
-
-### 🛠️ Development (if needed)
-- **Xcode:** Mac App Store
 
 ## SSH Key Setup
 
-The install script will offer to generate an SSH key for GitHub. If you skip it, you can generate one later:
+The install script offers to generate an SSH key for GitHub. If you skip it:
 
 ```bash
 # Generate SSH key
@@ -140,25 +137,30 @@ eval "$(ssh-agent -s)"
 # Add key to agent with Keychain
 ssh-add --apple-use-keychain ~/.ssh/id_ed25519
 
-# Copy public key
+# Copy public key to clipboard
 cat ~/.ssh/id_ed25519.pub | pbcopy
 ```
 
-Then add it to GitHub: https://github.com/settings/ssh/new
+Then add it at: https://github.com/settings/ssh/new
 
-## Ghostty Terminal (Global Hotkey)
+## Ghostty Terminal
 
-Ghostty is configured with a **global hotkey** (`Ctrl+\``) to toggle visibility from anywhere. This is set up early in the installation process.
+Ghostty is configured with a **global hotkey** (`Ctrl+\``) to toggle visibility from anywhere.
 
-### Requirements for Global Hotkey
+### Requirements
 
-1. **Accessibility Permissions** - macOS will prompt when Ghostty first opens
-   - Go to: `System Settings → Privacy & Security → Accessibility`
-   - Enable Ghostty
+1. **Accessibility Permissions** — macOS will prompt when Ghostty first opens
+   - System Settings → Privacy & Security → Accessibility → Enable Ghostty
 
-2. **Ghostty Running** - The app must be running in the background
-   - The installer adds Ghostty to Login Items automatically
-   - Config includes `quit-after-last-window-closed = false` to keep it running
+2. **Running in Background** — The installer adds Ghostty to Login Items automatically
+
+### Configuration
+
+Config is at `~/.config/ghostty/config` (symlinked from `configs/ghostty.txt`):
+
+- **Global hotkey:** `Ctrl+\`` toggles visibility
+- **Transparency:** 80% opacity with blur
+- **Background mode:** Stays running when windows closed
 
 ### Manual Setup (if needed)
 
@@ -166,26 +168,16 @@ Ghostty is configured with a **global hotkey** (`Ctrl+\``) to toggle visibility 
 # Add Ghostty to Login Items
 osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/Ghostty.app", hidden:true}'
 
-# Open System Settings for Accessibility
+# Open Accessibility settings
 open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
 ```
 
-### Configuration
-
-Ghostty config is at `~/.config/ghostty/config` (symlinked from dotfiles). Key settings:
-
-- **Global hotkey:** `Ctrl+\`` toggles visibility
-- **Transparency:** 80% opacity with blur
-- **Window state:** Saves position and size
-- **Background mode:** Stays running when windows closed
-
 ## Editor Settings
 
-**VSCode:** Has built-in Settings Sync (already enabled if signed in)
+**VS Code** and **Cursor** have built-in Settings Sync — no need to manage in dotfiles.
 
-**Cursor:** Import from VSCode → `Settings → Import from VS Code`
-
-No need to manage editor settings in dotfiles - use built-in cloud sync.
+After installation:
+- **Cursor:** Settings → Import from VS Code
 
 ## Troubleshooting
 
@@ -208,39 +200,24 @@ brew bundle install
 
 **SSH key not working:**
 ```bash
-# Check if ssh-agent is running
 eval "$(ssh-agent -s)"
-
-# Add your key
 ssh-add --apple-use-keychain ~/.ssh/id_ed25519
-
-# Test GitHub connection
 ssh -T git@github.com
 ```
 
-**Oh My Zsh plugins not working:**
-The plugins are configured directly in `~/.zshrc`. Check that the plugins line includes your desired plugins:
+**Oh My Zsh plugins not loading:**
+Check `~/.zshrc` includes:
 ```bash
 plugins=(git docker node npm nvm macos z)
 ```
 
 ## How It Works
 
-- **Idempotent** - Safe to run multiple times, won't reinstall
-- **Non-destructive** - Backs up existing configs before changes
-- **Apple Silicon ready** - Properly handles /opt/homebrew path
-- **Tool-managed configs** - NVM, pnpm, gcloud add their own configurations
-- **Personal preferences** - Your aliases and settings in `configs/zshrc`
-- **Optional apps** - Manual download to avoid installation failures
-
-## Additional Documentation
-
-See `docs/` folder for:
-- Configuration philosophy
-- Editor settings details
-- Architecture diagrams
-- Migration guides
+- **Idempotent** — Safe to run multiple times
+- **Non-destructive** — Backs up existing configs before overwriting
+- **Apple Silicon ready** — Handles `/opt/homebrew` path correctly
+- **Graceful failures** — Continues if some packages fail (e.g., App Store apps)
 
 ---
 
-**First time?** Run `./install.sh --dry-run` to see what will happen!
+**First time?** Run `./install.sh --dry-run` to preview!

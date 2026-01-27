@@ -6,11 +6,10 @@
 # Description: Automated setup for new macOS computers
 # Usage: ./install.sh [--dry-run]
 #
-# BOOTSTRAP (run these on a fresh Mac - script handles the rest!):
-#   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/enrique-ramirez/dotfiles/main/install.sh)"
-#   OR if you have git:
-#   git clone https://github.com/enrique-ramirez/dotfiles ~/Projects/dotfiles
-#   cd ~/Projects/dotfiles && ./install.sh
+# Quick Start (fresh Mac):
+#   1. xcode-select --install
+#   2. git clone https://github.com/enrique-ramirez/dotfiles ~/Projects/dotfiles
+#   3. cd ~/Projects/dotfiles && ./install.sh
 ###############################################################################
 
 set -e  # Exit on error
@@ -229,32 +228,12 @@ fi
 
 print_header "Installing packages from Brewfile"
 
-# Check Mac App Store sign-in (needed for mas to install Spark, Xcode)
+# Reminder about Mac App Store sign-in (needed for mas to install Spark, Xcode)
+# Note: `mas account` is broken on macOS 12+ (Apple removed the private API)
+# We just remind the user and let brew bundle handle any failures gracefully
 if [ "$DRY_RUN" = false ]; then
-    print_info "Checking Mac App Store sign-in status..."
-
-    # Install mas first to check sign-in
-    if ! command_exists mas; then
-        brew install mas
-    fi
-
-    if ! mas account &> /dev/null; then
-        echo ""
-        echo -e "${YELLOW}╔════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${YELLOW}║  📱 Mac App Store Sign-In Required                         ║${NC}"
-        echo -e "${YELLOW}╠════════════════════════════════════════════════════════════╣${NC}"
-        echo -e "${YELLOW}║  Some apps (Spark, Xcode) require the Mac App Store.       ║${NC}"
-        echo -e "${YELLOW}║  Please sign in to continue.                               ║${NC}"
-        echo -e "${YELLOW}╚════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
-        print_info "Opening Mac App Store..."
-        open -a "App Store"
-        echo ""
-        read -p "$(echo -e "${YELLOW}Press Enter once you have signed in to the App Store...${NC}")" -r
-        echo ""
-    else
-        print_success "Already signed into Mac App Store"
-    fi
+    print_info "Mac App Store apps (Spark, Xcode) require being signed in."
+    print_info "If not signed in, these will be skipped and can be installed later."
 fi
 
 if [ -f "$DOTFILES_DIR/Brewfile" ]; then
@@ -290,8 +269,9 @@ fi
 ###############################################################################
 
 if [ "$DRY_RUN" = false ] && command_exists xcodebuild; then
-    # Check if license is already accepted
-    if ! xcodebuild -checkFirstLaunchStatus &>/dev/null; then
+    # Check if license is already accepted by running a simple xcodebuild command
+    # If license isn't accepted, xcodebuild commands will fail
+    if ! xcodebuild -version &>/dev/null; then
         print_header "Xcode License"
         print_info "Accepting Xcode license agreement..."
         sudo xcodebuild -license accept
