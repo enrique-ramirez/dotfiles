@@ -45,7 +45,7 @@ print_success "All packages upgraded"
 print_header "Checking Brewfile"
 DOTFILES_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DOTFILES_DIR"
-brew bundle install --no-lock
+brew bundle install
 print_success "Brewfile packages synced"
 
 # Cleanup

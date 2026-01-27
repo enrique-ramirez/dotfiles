@@ -23,7 +23,8 @@ brew "mas"              # Mac App Store CLI (for installing App Store apps)
 # DEVELOPMENT TOOLS (Always installed)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-brew "google-cloud-sdk" # Google Cloud Platform CLI
+# Note: google-cloud-sdk is installed via official installer in install.sh
+# (Homebrew formula is unreliable/deprecated)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ESSENTIAL APPLICATIONS (Always installed)

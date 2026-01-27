@@ -246,7 +246,7 @@ if [ -f "$DOTFILES_DIR/Brewfile" ]; then
         print_info "Running brew bundle (this may take a while)..."
         cd "$DOTFILES_DIR"
 
-        if ! brew bundle install --no-lock; then
+        if ! brew bundle install; then
             print_warning "Some packages failed to install"
             print_info "You can retry failed packages later with: brew bundle install"
             echo ""
@@ -540,20 +540,53 @@ else
 fi
 
 ###############################################################################
-# Google Cloud SDK integration
+# Google Cloud SDK installation (official installer)
+# https://cloud.google.com/sdk/docs/install
 ###############################################################################
 
 print_header "Google Cloud SDK"
 
-# Determine Homebrew prefix based on architecture
-GCLOUD_PATH="/opt/homebrew/share/google-cloud-sdk"
-if [[ $(uname -m) == "x86_64" ]]; then
-    GCLOUD_PATH="/usr/local/share/google-cloud-sdk"
-fi
+GCLOUD_PATH="$HOME/google-cloud-sdk"
 
 if [ -d "$GCLOUD_PATH" ]; then
+    print_success "Already installed at $GCLOUD_PATH"
+else
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would download and install Google Cloud SDK"
+    else
+        print_info "Downloading Google Cloud SDK..."
+
+        # Determine the correct package for the architecture
+        if [[ $(uname -m) == "arm64" ]]; then
+            GCLOUD_URL="https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-darwin-arm.tar.gz"
+        else
+            GCLOUD_URL="https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-darwin-x86_64.tar.gz"
+        fi
+
+        # Download and extract to home directory
+        cd "$HOME"
+        if curl -fsSL "$GCLOUD_URL" -o google-cloud-sdk.tar.gz; then
+            print_info "Extracting..."
+            tar -xzf google-cloud-sdk.tar.gz
+            rm google-cloud-sdk.tar.gz
+
+            # Run the install script (non-interactive)
+            print_info "Running Google Cloud SDK installer..."
+            "$GCLOUD_PATH/install.sh" --quiet --path-update=false --command-completion=false
+
+            print_success "Google Cloud SDK installed"
+        else
+            print_warning "Failed to download Google Cloud SDK"
+            print_info "You can install it manually later from: https://cloud.google.com/sdk/docs/install"
+        fi
+        cd "$DOTFILES_DIR"
+    fi
+fi
+
+# Configure shell integration
+if [ -d "$GCLOUD_PATH" ]; then
     if grep -q "google-cloud-sdk" "$ZSHRC_FILE" 2>/dev/null; then
-        print_success "Already configured"
+        print_success "Shell integration already configured"
     else
         if [ "$DRY_RUN" = true ]; then
             print_dry_run "Would add Google Cloud SDK to .zshrc"
@@ -561,15 +594,11 @@ if [ -d "$GCLOUD_PATH" ]; then
             print_info "Adding Google Cloud SDK to $ZSHRC_FILE..."
             echo "" >> "$ZSHRC_FILE"
             echo "# Google Cloud SDK" >> "$ZSHRC_FILE"
-            echo 'GCLOUD_SDK_PATH="/opt/homebrew/share/google-cloud-sdk"' >> "$ZSHRC_FILE"
-            echo '[[ $(uname -m) == "x86_64" ]] && GCLOUD_SDK_PATH="/usr/local/share/google-cloud-sdk"' >> "$ZSHRC_FILE"
-            echo 'if [ -f "$GCLOUD_SDK_PATH/path.zsh.inc" ]; then source "$GCLOUD_SDK_PATH/path.zsh.inc"; fi' >> "$ZSHRC_FILE"
-            echo 'if [ -f "$GCLOUD_SDK_PATH/completion.zsh.inc" ]; then source "$GCLOUD_SDK_PATH/completion.zsh.inc"; fi' >> "$ZSHRC_FILE"
-            print_success "Google Cloud SDK configured"
+            echo 'if [ -f "$HOME/google-cloud-sdk/path.zsh.inc" ]; then source "$HOME/google-cloud-sdk/path.zsh.inc"; fi' >> "$ZSHRC_FILE"
+            echo 'if [ -f "$HOME/google-cloud-sdk/completion.zsh.inc" ]; then source "$HOME/google-cloud-sdk/completion.zsh.inc"; fi' >> "$ZSHRC_FILE"
+            print_success "Shell integration configured"
         fi
     fi
-else
-    print_info "Google Cloud SDK not installed (install via: brew install google-cloud-sdk)"
 fi
 
 ###############################################################################
