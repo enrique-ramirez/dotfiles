@@ -52,10 +52,9 @@ print_success "Cleanup complete"
 # Update Oh My Zsh
 print_header "Updating Oh My Zsh"
 if [ -d "$HOME/.oh-my-zsh" ]; then
-    # Use the official OMZ update command (not git pull!)
-    zsh -ic 'omz update --unattended' 2>/dev/null || \
-        (cd "$HOME/.oh-my-zsh" && git pull --rebase --autostash)
-    print_success "Oh My Zsh updated"
+    zsh -ic 'omz update --unattended' 2>/dev/null && \
+        print_success "Oh My Zsh updated" || \
+        print_warning "Oh My Zsh update failed (try manually: omz update)"
 else
     print_info "Oh My Zsh not installed"
 fi
@@ -81,13 +80,13 @@ fi
 # Update pnpm
 print_header "Updating pnpm"
 if command -v pnpm &> /dev/null; then
-    # Use corepack if available (Node 16.10+), otherwise pnpm self-update
-    if command -v corepack &> /dev/null; then
-        corepack prepare pnpm@latest --activate 2>/dev/null || pnpm self-update
+    if pnpm self-update &>/dev/null; then
+        print_success "pnpm updated to: $(pnpm --version)"
     else
-        pnpm self-update 2>/dev/null || curl -fsSL https://get.pnpm.io/install.sh | sh -
+        print_info "self-update failed, reinstalling..."
+        curl -fsSL https://get.pnpm.io/install.sh | sh -
+        print_success "pnpm updated to: $(pnpm --version)"
     fi
-    print_success "pnpm updated to: $(pnpm --version)"
 else
     print_info "pnpm not installed"
 fi

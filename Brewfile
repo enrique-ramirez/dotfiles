@@ -17,6 +17,7 @@ brew "ripgrep"          # Better grep
 brew "eza"              # Modern replacement for ls (better than exa)
 brew "fd"               # Simple, fast alternative to find
 brew "tldr"             # Simplified man pages
+brew "mas"              # Mac App Store CLI (for installing App Store apps)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DEVELOPMENT TOOLS (Always installed)
@@ -64,10 +65,8 @@ cask "zoom"
 cask "spotify"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MAC APP STORE (requires `mas` CLI and being signed into App Store)
+# MAC APP STORE (requires being signed into App Store)
 # ═══════════════════════════════════════════════════════════════════════════════
-
-brew "mas"              # Mac App Store CLI
 
 mas "Spark – Email App by Readdle", id: 1176895641
 mas "Xcode", id: 497799835

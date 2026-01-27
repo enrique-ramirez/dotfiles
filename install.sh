@@ -21,7 +21,6 @@ for arg in "$@"; do
     case $arg in
         --dry-run)
             DRY_RUN=true
-            shift
             ;;
         --help)
             echo "Usage: ./install.sh [--dry-run]"
@@ -97,16 +96,6 @@ print_link() {
 
 command_exists() {
     command -v "$1" &> /dev/null
-}
-
-# Execute command or show what would be executed
-execute() {
-    if [ "$DRY_RUN" = true ]; then
-        print_dry_run "$*"
-        return 0
-    else
-        eval "$*"
-    fi
 }
 
 # Add line to file if not already present
@@ -206,12 +195,25 @@ else
         print_dry_run "Would add to PATH for Apple Silicon if needed"
     else
         print_info "Installing Homebrew..."
-        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+        if ! NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
+            print_error "Homebrew installation failed!"
+            print_error "Check your internet connection and try again."
+            exit 1
+        fi
 
         # Add Homebrew to PATH for Apple Silicon Macs (for current session)
         if [[ $(uname -m) == "arm64" ]]; then
             eval "$(/opt/homebrew/bin/brew shellenv)"
         fi
+
+        # Verify installation succeeded
+        if ! command_exists brew; then
+            print_error "Homebrew installed but 'brew' command not found!"
+            print_error "Try restarting your terminal and running the script again."
+            exit 1
+        fi
+
         print_success "Homebrew installed"
     fi
 fi
@@ -264,11 +266,37 @@ if [ -f "$DOTFILES_DIR/Brewfile" ]; then
     else
         print_info "Running brew bundle (this may take a while)..."
         cd "$DOTFILES_DIR"
-        brew bundle install --no-lock
-        print_success "All packages installed"
+
+        if ! brew bundle install --no-lock; then
+            print_warning "Some packages failed to install"
+            print_info "You can retry failed packages later with: brew bundle install"
+            echo ""
+            read -p "$(echo -e "${YELLOW}Continue with the rest of the setup? [Y/n]: ${NC}")" -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Nn]$ ]]; then
+                print_error "Setup aborted. Fix brew issues and re-run ./install.sh"
+                exit 1
+            fi
+        else
+            print_success "All packages installed"
+        fi
     fi
 else
     print_warning "Brewfile not found at $DOTFILES_DIR/Brewfile"
+fi
+
+###############################################################################
+# Accept Xcode License (if Xcode was installed)
+###############################################################################
+
+if [ "$DRY_RUN" = false ] && command_exists xcodebuild; then
+    # Check if license is already accepted
+    if ! xcodebuild -checkFirstLaunchStatus &>/dev/null; then
+        print_header "Xcode License"
+        print_info "Accepting Xcode license agreement..."
+        sudo xcodebuild -license accept
+        print_success "Xcode license accepted"
+    fi
 fi
 
 ###############################################################################
@@ -279,22 +307,41 @@ print_header "Ghostty Terminal Setup"
 
 # Setup Ghostty config first
 GHOSTTY_CONFIG_DIR="$HOME/.config/ghostty"
-if [ -f "$DOTFILES_DIR/configs/ghostty.txt" ]; then
+GHOSTTY_CONFIG_SRC="$DOTFILES_DIR/configs/ghostty.txt"
+GHOSTTY_CONFIG_DST="$GHOSTTY_CONFIG_DIR/config"
+
+if [ -f "$GHOSTTY_CONFIG_SRC" ]; then
     if [ "$DRY_RUN" = true ]; then
         print_dry_run "Would setup Ghostty config"
     else
-        mkdir -p "$GHOSTTY_CONFIG_DIR"
-        if [ -f "$GHOSTTY_CONFIG_DIR/config" ] || [ -L "$GHOSTTY_CONFIG_DIR/config" ]; then
-            # Backup existing config
-            mv "$GHOSTTY_CONFIG_DIR/config" "$GHOSTTY_CONFIG_DIR/config.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+        # Check if already correctly symlinked
+        if [ -L "$GHOSTTY_CONFIG_DST" ] && [ "$(readlink "$GHOSTTY_CONFIG_DST")" = "$GHOSTTY_CONFIG_SRC" ]; then
+            print_success "Ghostty config already linked"
+        else
+            mkdir -p "$GHOSTTY_CONFIG_DIR"
+            # Backup existing config only if it's a regular file
+            if [ -f "$GHOSTTY_CONFIG_DST" ] && [ ! -L "$GHOSTTY_CONFIG_DST" ]; then
+                mv "$GHOSTTY_CONFIG_DST" "$GHOSTTY_CONFIG_DST.backup.$(date +%Y%m%d_%H%M%S)"
+                print_info "Backed up existing Ghostty config"
+            fi
+            # Remove existing symlink if pointing elsewhere
+            [ -L "$GHOSTTY_CONFIG_DST" ] && rm "$GHOSTTY_CONFIG_DST"
+            ln -sf "$GHOSTTY_CONFIG_SRC" "$GHOSTTY_CONFIG_DST"
+            print_success "Ghostty config linked"
         fi
-        ln -sf "$DOTFILES_DIR/configs/ghostty.txt" "$GHOSTTY_CONFIG_DIR/config"
-        print_success "Ghostty config linked"
     fi
 fi
 
 # Check if Ghostty is installed and set it up for global hotkey
-if [ -d "/Applications/Ghostty.app" ] && [ "$DRY_RUN" = false ]; then
+# Check both system-wide and user-specific Applications folders
+GHOSTTY_APP=""
+if [ -d "/Applications/Ghostty.app" ]; then
+    GHOSTTY_APP="/Applications/Ghostty.app"
+elif [ -d "$HOME/Applications/Ghostty.app" ]; then
+    GHOSTTY_APP="$HOME/Applications/Ghostty.app"
+fi
+
+if [ -n "$GHOSTTY_APP" ] && [ "$DRY_RUN" = false ]; then
     print_info "Ghostty is installed!"
     echo ""
     echo -e "${YELLOW}${BOLD}⚡ Global Hotkey Setup (Ctrl+\`)${NC}"
@@ -303,11 +350,15 @@ if [ -d "/Applications/Ghostty.app" ] && [ "$DRY_RUN" = false ]; then
     echo -e "  2. ${BOLD}Running in background${NC} - Configure 'Launch at Login' in Ghostty settings"
     echo ""
 
-    # Add Ghostty to Login Items
-    print_info "Adding Ghostty to Login Items..."
-    osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/Ghostty.app", hidden:true}' 2>/dev/null && \
-        print_success "Ghostty will launch at login (hidden)" || \
-        print_warning "Could not add to Login Items - add manually in System Settings"
+    # Add Ghostty to Login Items (only if not already added)
+    if osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null | grep -q "Ghostty"; then
+        print_success "Ghostty already in Login Items"
+    else
+        print_info "Adding Ghostty to Login Items..."
+        osascript -e "tell application \"System Events\" to make login item at end with properties {path:\"$GHOSTTY_APP\", hidden:true}" 2>/dev/null && \
+            print_success "Ghostty will launch at login (hidden)" || \
+            print_warning "Could not add to Login Items - add manually in System Settings"
+    fi
 
     echo ""
     read -p "$(echo -e "${YELLOW}Open Ghostty now to grant permissions? [Y/n]: ${NC}")" -n 1 -r
@@ -513,7 +564,14 @@ fi
 ###############################################################################
 
 print_header "Google Cloud SDK"
-if [ -d "/opt/homebrew/share/google-cloud-sdk" ]; then
+
+# Determine Homebrew prefix based on architecture
+GCLOUD_PATH="/opt/homebrew/share/google-cloud-sdk"
+if [[ $(uname -m) == "x86_64" ]]; then
+    GCLOUD_PATH="/usr/local/share/google-cloud-sdk"
+fi
+
+if [ -d "$GCLOUD_PATH" ]; then
     if grep -q "google-cloud-sdk" "$ZSHRC_FILE" 2>/dev/null; then
         print_success "Already configured"
     else
@@ -523,12 +581,10 @@ if [ -d "/opt/homebrew/share/google-cloud-sdk" ]; then
             print_info "Adding Google Cloud SDK to $ZSHRC_FILE..."
             echo "" >> "$ZSHRC_FILE"
             echo "# Google Cloud SDK" >> "$ZSHRC_FILE"
-            echo 'if [ -f "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc" ]; then' >> "$ZSHRC_FILE"
-            echo '  source "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc"' >> "$ZSHRC_FILE"
-            echo 'fi' >> "$ZSHRC_FILE"
-            echo 'if [ -f "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc" ]; then' >> "$ZSHRC_FILE"
-            echo '  source "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc"' >> "$ZSHRC_FILE"
-            echo 'fi' >> "$ZSHRC_FILE"
+            echo 'GCLOUD_SDK_PATH="/opt/homebrew/share/google-cloud-sdk"' >> "$ZSHRC_FILE"
+            echo '[[ $(uname -m) == "x86_64" ]] && GCLOUD_SDK_PATH="/usr/local/share/google-cloud-sdk"' >> "$ZSHRC_FILE"
+            echo 'if [ -f "$GCLOUD_SDK_PATH/path.zsh.inc" ]; then source "$GCLOUD_SDK_PATH/path.zsh.inc"; fi' >> "$ZSHRC_FILE"
+            echo 'if [ -f "$GCLOUD_SDK_PATH/completion.zsh.inc" ]; then source "$GCLOUD_SDK_PATH/completion.zsh.inc"; fi' >> "$ZSHRC_FILE"
             print_success "Google Cloud SDK configured"
         fi
     fi
@@ -570,21 +626,37 @@ if [ "$DRY_RUN" = true ]; then
     print_dry_run "Would symlink gitconfig from dotfiles"
 else
     if [ -f "$GITCONFIG_SRC" ]; then
-        # Backup existing gitconfig if it's a regular file (not a symlink)
-        if [ -f "$GITCONFIG_DST" ] && [ ! -L "$GITCONFIG_DST" ]; then
-            mv "$GITCONFIG_DST" "$GITCONFIG_DST.backup.$(date +%Y%m%d_%H%M%S)"
-            print_info "Backed up existing .gitconfig"
+        # Check if already correctly symlinked
+        if [ -L "$GITCONFIG_DST" ] && [ "$(readlink "$GITCONFIG_DST")" = "$GITCONFIG_SRC" ]; then
+            print_success "Git config already linked"
+        else
+            # Backup existing gitconfig if it's a regular file (not a symlink)
+            if [ -f "$GITCONFIG_DST" ] && [ ! -L "$GITCONFIG_DST" ]; then
+                mv "$GITCONFIG_DST" "$GITCONFIG_DST.backup.$(date +%Y%m%d_%H%M%S)"
+                print_info "Backed up existing .gitconfig"
+            fi
+            # Remove existing symlink if pointing elsewhere
+            [ -L "$GITCONFIG_DST" ] && rm "$GITCONFIG_DST"
+            ln -sf "$GITCONFIG_SRC" "$GITCONFIG_DST"
+            print_success "Git configured (symlinked from dotfiles)"
         fi
-        # Remove existing symlink if pointing elsewhere
-        if [ -L "$GITCONFIG_DST" ]; then
-            rm "$GITCONFIG_DST"
-        fi
-        ln -sf "$GITCONFIG_SRC" "$GITCONFIG_DST"
-        print_success "Git configured (symlinked from dotfiles)"
     else
         print_warning "gitconfig not found at $GITCONFIG_SRC, configuring manually..."
-        git config --global user.name "Enrique Ramírez"
-        git config --global user.email "hello@enrique-ramirez.com"
+
+        # Prompt for git identity if not already configured
+        CURRENT_NAME=$(git config --global user.name 2>/dev/null || echo "")
+        CURRENT_EMAIL=$(git config --global user.email 2>/dev/null || echo "")
+
+        if [ -z "$CURRENT_NAME" ]; then
+            read -p "$(echo -e "${YELLOW}Enter your name for git: ${NC}")" GIT_NAME
+            git config --global user.name "$GIT_NAME"
+        fi
+
+        if [ -z "$CURRENT_EMAIL" ]; then
+            read -p "$(echo -e "${YELLOW}Enter your email for git: ${NC}")" GIT_EMAIL
+            git config --global user.email "$GIT_EMAIL"
+        fi
+
         git config --global core.editor "cursor --wait"
         git config --global init.defaultBranch "main"
         print_success "Git configured"
@@ -606,6 +678,20 @@ if [ -f "$SSH_KEY_PATH" ]; then
     echo ""
     cat "$SSH_KEY_PUB"
     echo ""
+
+    # Copy to clipboard
+    cat "$SSH_KEY_PUB" | pbcopy
+    print_success "Public key copied to clipboard! 📋"
+
+    if [ "$DRY_RUN" = false ]; then
+        echo ""
+        read -p "$(echo -e "${YELLOW}Open GitHub to add this key? [Y/n]: ${NC}")" -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            open "https://github.com/settings/ssh/new"
+            print_info "Just paste (⌘V) and click 'Add SSH key'!"
+        fi
+    fi
 else
     if [ "$DRY_RUN" = true ]; then
         print_dry_run "Would generate SSH key at $SSH_KEY_PATH"
@@ -622,9 +708,22 @@ else
             mkdir -p "$HOME/.ssh"
             chmod 700 "$HOME/.ssh"
 
+            # Get email for SSH key (try git config first, then prompt)
+            SSH_EMAIL=$(git config --global user.email 2>/dev/null || echo "")
+            if [ -z "$SSH_EMAIL" ]; then
+                read -p "$(echo -e "${YELLOW}Enter your email for the SSH key: ${NC}")" SSH_EMAIL
+                if [ -z "$SSH_EMAIL" ]; then
+                    print_error "Email is required for SSH key generation"
+                    SSH_EMAIL="user@example.com"
+                    print_warning "Using placeholder: $SSH_EMAIL"
+                fi
+            else
+                print_info "Using email from git config: $SSH_EMAIL"
+            fi
+
             # Generate SSH key
             print_info "Generating SSH key..."
-            ssh-keygen -t ed25519 -C "hello@enrique-ramirez.com" -f "$SSH_KEY_PATH" -N ""
+            ssh-keygen -t ed25519 -C "$SSH_EMAIL" -f "$SSH_KEY_PATH" -N ""
 
             # Start ssh-agent and add key
             eval "$(ssh-agent -s)" > /dev/null
@@ -645,12 +744,19 @@ else
 
             print_success "SSH key generated!"
             echo ""
-            print_info "Your public key (copy this to GitHub):"
+
+            # Copy to clipboard automatically
+            cat "$SSH_KEY_PUB" | pbcopy
+            print_success "Public key copied to clipboard! 📋"
             echo ""
             echo -e "${CYAN}$(cat "$SSH_KEY_PUB")${NC}"
             echo ""
-            print_info "Add this key to GitHub:"
-            print_link "https://github.com/settings/ssh/new"
+
+            # Open GitHub SSH settings
+            print_info "Opening GitHub SSH settings..."
+            open "https://github.com/settings/ssh/new"
+            echo ""
+            echo -e "${GREEN}Just paste (⌘V) and click 'Add SSH key'!${NC}"
             echo ""
 
             read -p "$(echo -e "${YELLOW}Press Enter once you have added the key to GitHub...${NC}")" -r
