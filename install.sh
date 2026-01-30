@@ -517,6 +517,95 @@ else
 fi
 
 ###############################################################################
+# Install pyenv and Python
+###############################################################################
+
+print_header "pyenv (Python Version Manager)"
+
+# Check if pyenv is installed (via Homebrew)
+if command_exists pyenv; then
+    print_success "pyenv already installed"
+else
+    print_warning "pyenv not found (should be installed via Brewfile)"
+    print_info "Run 'brew install pyenv' manually if needed"
+fi
+
+# Configure shell integration for pyenv
+if command_exists pyenv; then
+    if grep -q 'PYENV_ROOT' "$ZSHRC_FILE" 2>/dev/null; then
+        print_success "pyenv shell configuration already present"
+    else
+        if [ "$DRY_RUN" = true ]; then
+            print_dry_run "Would add pyenv configuration to .zshrc"
+        else
+            print_info "Adding pyenv configuration to $ZSHRC_FILE..."
+            echo "" >> "$ZSHRC_FILE"
+            echo "# pyenv (Python version manager)" >> "$ZSHRC_FILE"
+            echo 'export PYENV_ROOT="$HOME/.pyenv"' >> "$ZSHRC_FILE"
+            echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> "$ZSHRC_FILE"
+            echo 'eval "$(pyenv init - zsh)"' >> "$ZSHRC_FILE"
+            print_success "pyenv shell configuration added"
+        fi
+    fi
+
+    # Initialize pyenv for this session
+    if [ "$DRY_RUN" = false ]; then
+        export PYENV_ROOT="$HOME/.pyenv"
+        [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+        eval "$(pyenv init -)"
+    fi
+fi
+
+###############################################################################
+# Install Latest Python via pyenv
+###############################################################################
+
+print_header "Python (via pyenv)"
+
+if command_exists pyenv; then
+    # Check if any Python version is installed via pyenv
+    PYENV_VERSIONS=$(pyenv versions --bare 2>/dev/null | grep -v "system" || true)
+
+    if [ -n "$PYENV_VERSIONS" ]; then
+        CURRENT_PYTHON=$(pyenv version-name 2>/dev/null || echo "none")
+        print_success "Python already installed via pyenv: $CURRENT_PYTHON"
+        print_info "Installed versions:"
+        pyenv versions --bare 2>/dev/null | while read version; do
+            echo "    - $version"
+        done
+    else
+        if [ "$DRY_RUN" = true ]; then
+            print_dry_run "Would install latest Python 3 via pyenv"
+            print_dry_run "Would set it as global Python version"
+        else
+            print_info "Installing latest Python 3 (this may take a few minutes)..."
+
+            # Install latest Python 3 (pyenv resolves '3' to latest 3.x.x)
+            if pyenv install 3; then
+                # Get the version that was just installed
+                INSTALLED_VERSION=$(pyenv versions --bare 2>/dev/null | grep -v "system" | tail -1)
+                print_success "Python $INSTALLED_VERSION installed"
+
+                # Set as global Python
+                print_info "Setting Python $INSTALLED_VERSION as global version..."
+                pyenv global "$INSTALLED_VERSION"
+                print_success "Python $INSTALLED_VERSION set as global"
+
+                # Rehash to update shims
+                pyenv rehash
+            else
+                print_warning "Python installation failed"
+                print_info "You can install Python manually later with: pyenv install 3"
+                print_info "Check build dependencies: https://github.com/pyenv/pyenv/wiki#suggested-build-environment"
+            fi
+        fi
+    fi
+else
+    print_warning "pyenv not available, skipping Python installation"
+    print_info "Install pyenv first, then run: pyenv install 3"
+fi
+
+###############################################################################
 # Setup fzf shell integration (modern method)
 ###############################################################################
 
@@ -865,7 +954,8 @@ echo -e "   ✓ 1Password, Chrome, Zen Browser"
 echo -e "   ✓ VS Code, Cursor, Ghostty, Docker"
 echo -e "   ✓ Figma, Slack, ClickUp, Dropbox, Zoom"
 echo -e "   ✓ Spotify"
-echo -e "   ✓ Spark, Xcode (from Mac App Store)\n"
+echo -e "   ✓ Spark, Xcode (from Mac App Store)"
+echo -e "   ✓ Node.js (via NVM), Python (via pyenv)\n"
 
 ###############################################################################
 # Next Steps
