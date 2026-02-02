@@ -97,6 +97,35 @@ command_exists() {
     command -v "$1" &> /dev/null
 }
 
+# Check if a cask application is already installed (manually or via Homebrew)
+# Returns 0 if installed, 1 if not
+cask_app_installed() {
+    local cask_name="$1"
+
+    # Check if installed via Homebrew first
+    if brew list --cask "$cask_name" &>/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Map cask names to actual .app names (only for non-standard cases)
+    local app_name
+    case "$cask_name" in
+        "visual-studio-code") app_name="Visual Studio Code" ;;
+        "google-chrome") app_name="Google Chrome" ;;
+        "zen-browser") app_name="Zen Browser" ;;
+        "1password") app_name="1Password" ;;
+        "qlvideo") app_name="QuickLook Video" ;;
+        "iina") app_name="IINA" ;;
+        *)
+            # Default: Convert dashes to spaces and capitalize each word
+            app_name=$(echo "$cask_name" | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))}1')
+            ;;
+    esac
+
+    # Check both Applications folders
+    [ -d "/Applications/${app_name}.app" ] || [ -d "$HOME/Applications/${app_name}.app" ]
+}
+
 # Add line to file if not already present
 add_to_file_if_missing() {
     local file="$1"
@@ -237,28 +266,66 @@ if [ "$DRY_RUN" = false ]; then
 fi
 
 if [ -f "$DOTFILES_DIR/Brewfile" ]; then
+    # Create a filtered Brewfile that excludes already-installed casks
+    # This makes the script idempotent even for manually-installed apps
+    FILTERED_BREWFILE="$DOTFILES_DIR/.Brewfile.filtered"
+    SKIPPED_CASKS=()
+
+    # Clear any existing filtered file
+    > "$FILTERED_BREWFILE"
+
+    print_info "Checking for already-installed applications..."
+
+    # Process the Brewfile line by line, filtering out installed casks
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Check if this is a cask line
+        if [[ "$line" =~ ^cask[[:space:]]+\"([^\"]+)\" ]]; then
+            cask_name="${BASH_REMATCH[1]}"
+            if cask_app_installed "$cask_name"; then
+                SKIPPED_CASKS+=("$cask_name")
+                # Add as comment to show it was skipped
+                echo "# SKIPPED (already installed): $line" >> "$FILTERED_BREWFILE"
+            else
+                echo "$line" >> "$FILTERED_BREWFILE"
+            fi
+        else
+            # Keep all other lines (brew, mas, comments, etc.)
+            echo "$line" >> "$FILTERED_BREWFILE"
+        fi
+    done < "$DOTFILES_DIR/Brewfile"
+
+    # Report skipped casks
+    if [ ${#SKIPPED_CASKS[@]} -gt 0 ]; then
+        print_success "Skipping already-installed apps: ${SKIPPED_CASKS[*]}"
+    fi
+
     if [ "$DRY_RUN" = true ]; then
         print_info "Packages that would be installed:"
-        grep -E "^brew |^cask |^mas " "$DOTFILES_DIR/Brewfile" | while read line; do
+        grep -E "^brew |^cask |^mas " "$FILTERED_BREWFILE" | while read line; do
             print_dry_run "$line"
         done
+        rm -f "$FILTERED_BREWFILE"
     else
         print_info "Running brew bundle (this may take a while)..."
         cd "$DOTFILES_DIR"
 
-        if ! brew bundle install; then
+        if ! brew bundle install --file="$FILTERED_BREWFILE"; then
             print_warning "Some packages failed to install"
             print_info "You can retry failed packages later with: brew bundle install"
             echo ""
             read -p "$(echo -e "${YELLOW}Continue with the rest of the setup? [Y/n]: ${NC}")" -n 1 -r
             echo
             if [[ $REPLY =~ ^[Nn]$ ]]; then
+                rm -f "$FILTERED_BREWFILE"
                 print_error "Setup aborted. Fix brew issues and re-run ./install.sh"
                 exit 1
             fi
         else
             print_success "All packages installed"
         fi
+
+        # Clean up filtered Brewfile
+        rm -f "$FILTERED_BREWFILE"
     fi
 else
     print_warning "Brewfile not found at $DOTFILES_DIR/Brewfile"
@@ -276,6 +343,42 @@ if [ "$DRY_RUN" = false ] && command_exists xcodebuild; then
         print_info "Accepting Xcode license agreement..."
         sudo xcodebuild -license accept
         print_success "Xcode license accepted"
+    fi
+fi
+
+###############################################################################
+# QLVideo Setup (QuickLook support for webm, mkv, etc.)
+###############################################################################
+
+QLVIDEO_APP=""
+if [ -d "/Applications/QuickLook Video.app" ]; then
+    QLVIDEO_APP="/Applications/QuickLook Video.app"
+elif [ -d "$HOME/Applications/QuickLook Video.app" ]; then
+    QLVIDEO_APP="$HOME/Applications/QuickLook Video.app"
+fi
+
+if [ -n "$QLVIDEO_APP" ]; then
+    print_header "QLVideo (QuickLook for Videos)"
+
+    # Check if QLVideo plugin is already registered by looking for its plugin
+    QLVIDEO_PLUGIN_REGISTERED=false
+    if [ -d "$QLVIDEO_APP/Contents/Library/QuickLook" ] || \
+       qlmanage -m 2>/dev/null | grep -q "QLVideo"; then
+        QLVIDEO_PLUGIN_REGISTERED=true
+    fi
+
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would run QuickLook Video app to register plugin"
+    else
+        # Run the app once to register the QuickLook plugin with macOS
+        # The app registers itself then can be quit
+        print_info "Activating QLVideo QuickLook plugin..."
+        open -a "QuickLook Video"
+        sleep 2
+        # The app should stay open - user can quit it manually or it runs in background
+        print_success "QLVideo plugin activated"
+        print_info "You can now preview webm, mkv, and other video files with QuickLook (Spacebar)"
+        print_info "Note: You may need to restart Finder or log out/in for thumbnails to appear"
     fi
 fi
 
@@ -953,7 +1056,9 @@ echo -e "${CYAN}Installed:${NC}"
 echo -e "   ✓ 1Password, Chrome, Zen Browser"
 echo -e "   ✓ VS Code, Cursor, Ghostty, Docker"
 echo -e "   ✓ Figma, Slack, ClickUp, Dropbox, Zoom"
-echo -e "   ✓ Spotify"
+echo -e "   ✓ Spotify, IINA (media player)"
+echo -e "   ✓ QLVideo (QuickLook for webm, mkv, etc.)"
+echo -e "   ✓ aria2 (download/torrent CLI)"
 echo -e "   ✓ Spark, Xcode (from Mac App Store)"
 echo -e "   ✓ Node.js (via NVM), Python (via pyenv)\n"
 

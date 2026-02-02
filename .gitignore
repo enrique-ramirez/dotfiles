@@ -7,4 +7,4 @@
 *.backup.*
 *.old
 Brewfile.lock.json
-
+.Brewfile.filtered

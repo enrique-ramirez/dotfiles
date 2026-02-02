@@ -66,6 +66,19 @@ cask "zoom"
 # ═══════════════════════════════════════════════════════════════════════════════
 
 cask "spotify"
+cask "iina"                 # Modern macOS media player (plays everything)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DOWNLOAD UTILITIES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+brew "aria2"                # Download utility with BitTorrent, HTTP/HTTPS, FTP support
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# QUICKLOOK PLUGINS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+cask "qlvideo"          # QuickLook support for webm, mkv, and other video formats
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAC APP STORE (requires being signed into App Store)
