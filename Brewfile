@@ -75,6 +75,12 @@ cask "iina"                 # Modern macOS media player (plays everything)
 brew "aria2"                # Download utility with BitTorrent, HTTP/HTTPS, FTP support
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# UTILITIES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+cask "the-unarchiver"   # Extract archives (zip, rar, 7z, tar, etc.)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # QUICKLOOK PLUGINS
 # ═══════════════════════════════════════════════════════════════════════════════
 

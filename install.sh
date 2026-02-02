@@ -116,6 +116,7 @@ cask_app_installed() {
         "1password") app_name="1Password" ;;
         "qlvideo") app_name="QuickLook Video" ;;
         "iina") app_name="IINA" ;;
+        "the-unarchiver") app_name="The Unarchiver" ;;
         *)
             # Default: Convert dashes to spaces and capitalize each word
             app_name=$(echo "$cask_name" | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))}1')
@@ -620,6 +621,29 @@ else
 fi
 
 ###############################################################################
+# Install Claude Code (Anthropic's AI coding assistant CLI)
+###############################################################################
+
+print_header "Claude Code"
+if command_exists claude; then
+    print_success "Already installed: $(claude --version 2>/dev/null || echo 'installed')"
+else
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would install Claude Code via npm"
+    else
+        if command_exists npm; then
+            print_info "Installing Claude Code..."
+            npm install -g @anthropic-ai/claude-code
+            print_success "Claude Code installed"
+            print_info "Run 'claude' to start using it"
+        else
+            print_warning "npm not found, skipping Claude Code installation"
+            print_info "Install manually later with: npm install -g @anthropic-ai/claude-code"
+        fi
+    fi
+fi
+
+###############################################################################
 # Install pyenv and Python
 ###############################################################################
 
@@ -1059,6 +1083,7 @@ echo -e "   ✓ Figma, Slack, ClickUp, Dropbox, Zoom"
 echo -e "   ✓ Spotify, IINA (media player)"
 echo -e "   ✓ QLVideo (QuickLook for webm, mkv, etc.)"
 echo -e "   ✓ aria2 (download/torrent CLI)"
+echo -e "   ✓ Claude Code (AI coding assistant)"
 echo -e "   ✓ Spark, Xcode (from Mac App Store)"
 echo -e "   ✓ Node.js (via NVM), Python (via pyenv)\n"
 
