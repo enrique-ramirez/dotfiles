@@ -114,7 +114,8 @@ cask_app_installed() {
     case "$cask_name" in
         "visual-studio-code") app_name="Visual Studio Code" ;;
         "google-chrome") app_name="Google Chrome" ;;
-        "zen-browser") app_name="Zen Browser" ;;
+        "docker-desktop") app_name="Docker" ;;
+        "zen") app_name="Zen Browser" ;;
         "1password") app_name="1Password" ;;
         "qlvideo") app_name="QuickLook Video" ;;
         "iina") app_name="IINA" ;;

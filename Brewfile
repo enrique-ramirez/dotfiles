@@ -36,7 +36,7 @@ brew "pyenv"            # Python version manager
 cask "visual-studio-code"
 cask "cursor"
 cask "ghostty"
-cask "docker"           # Docker Desktop (PostgreSQL etc. via containers)
+cask "docker-desktop"   # Docker Desktop (PostgreSQL etc. via containers)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECURITY & PASSWORDS
@@ -49,7 +49,7 @@ cask "1password"        # Password manager (install first, has all your keys!)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 cask "google-chrome"
-cask "zen-browser"
+cask "zen"              # Zen Browser
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PRODUCTIVITY & COMMUNICATION

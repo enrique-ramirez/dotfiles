@@ -192,38 +192,48 @@ fi
 # Update Cloud SQL Proxy
 print_header "Updating Cloud SQL Proxy"
 if command_exists cloud-sql-proxy; then
-    CURRENT_VERSION=$(cloud-sql-proxy --version 2>&1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    print_info "Current version: $CURRENT_VERSION"
+    # Version output is like: "cloud-sql-proxy version 2.21.0+darwin.arm64"
+    CURRENT_VERSION=$(cloud-sql-proxy --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    print_info "Current version: v$CURRENT_VERSION"
 
-    # Fetch latest version from GitHub
-    LATEST_VERSION=$(curl -fsSL https://api.github.com/repos/GoogleCloudPlatform/cloud-sql-proxy/releases/latest 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"(v[^"]+)".*/\1/')
+    # Fetch latest version from GitHub (v2 releases)
+    # Filter for v2.x releases only (not v1.x from the old proxy)
+    LATEST_VERSION=$(curl -fsSL "https://api.github.com/repos/GoogleCloudPlatform/cloud-sql-proxy/releases" 2>/dev/null | grep '"tag_name"' | grep -E '"v2\.' | head -1 | sed -E 's/.*"(v[^"]+)".*/\1/')
 
-    if [ -n "$LATEST_VERSION" ] && [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
-        print_info "Latest version: $LATEST_VERSION"
-        read -p "$(echo -e "  ${YELLOW}Update Cloud SQL Proxy to $LATEST_VERSION? [Y/n]:${NC} ")" -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            print_info "Downloading Cloud SQL Proxy $LATEST_VERSION..."
+    if [ -n "$LATEST_VERSION" ]; then
+        # Strip 'v' prefix for comparison
+        LATEST_VERSION_NUM="${LATEST_VERSION#v}"
 
-            # Determine the correct binary for the architecture
-            if [[ $(uname -m) == "arm64" ]]; then
-                PROXY_URL="https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/${LATEST_VERSION}/cloud-sql-proxy.darwin.arm64"
-            else
-                PROXY_URL="https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/${LATEST_VERSION}/cloud-sql-proxy.darwin.amd64"
+        if [ "$CURRENT_VERSION" != "$LATEST_VERSION_NUM" ]; then
+            print_info "Latest version: $LATEST_VERSION"
+            read -p "$(echo -e "  ${YELLOW}Update Cloud SQL Proxy to $LATEST_VERSION? [Y/n]:${NC} ")" -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                print_info "Downloading Cloud SQL Proxy $LATEST_VERSION..."
+
+                # Determine the correct binary for the architecture
+                if [[ $(uname -m) == "arm64" ]]; then
+                    PROXY_URL="https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/${LATEST_VERSION}/cloud-sql-proxy.darwin.arm64"
+                else
+                    PROXY_URL="https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/${LATEST_VERSION}/cloud-sql-proxy.darwin.amd64"
+                fi
+
+                TEMP_PROXY="/tmp/cloud-sql-proxy"
+                if curl -fsSL "$PROXY_URL" -o "$TEMP_PROXY"; then
+                    chmod +x "$TEMP_PROXY"
+                    print_info "Installing to /usr/local/bin (requires sudo)..."
+                    sudo mv "$TEMP_PROXY" /usr/local/bin/cloud-sql-proxy
+                    NEW_VERSION=$(cloud-sql-proxy --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+                    print_success "Cloud SQL Proxy updated to v$NEW_VERSION"
+                else
+                    print_warning "Failed to download Cloud SQL Proxy"
+                fi
             fi
-
-            TEMP_PROXY="/tmp/cloud-sql-proxy"
-            if curl -fsSL "$PROXY_URL" -o "$TEMP_PROXY"; then
-                chmod +x "$TEMP_PROXY"
-                print_info "Installing to /usr/local/bin (requires sudo)..."
-                sudo mv "$TEMP_PROXY" /usr/local/bin/cloud-sql-proxy
-                print_success "Cloud SQL Proxy updated to $(cloud-sql-proxy --version 2>&1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-            else
-                print_warning "Failed to download Cloud SQL Proxy"
-            fi
+        else
+            print_success "Cloud SQL Proxy is up to date"
         fi
     else
-        print_success "Cloud SQL Proxy is up to date"
+        print_warning "Could not fetch latest version from GitHub"
     fi
 else
     print_info "Cloud SQL Proxy not installed (run ./install.sh to install)"
@@ -233,15 +243,23 @@ fi
 if [ "$SKIP_MACOS" = false ]; then
     print_header "macOS Updates"
     print_info "Checking for macOS updates..."
-    softwareupdate -l
 
-    echo ""
-    read -p "$(echo -e "${YELLOW}Install macOS updates now? [y/N]:${NC} ")" -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        print_info "Installing updates (this may take a while)..."
-        sudo softwareupdate -i -a
-        print_success "macOS updates installed"
+    # Capture output to check if updates are available
+    UPDATE_OUTPUT=$(softwareupdate -l 2>&1)
+    echo "$UPDATE_OUTPUT"
+
+    # Only prompt if there are actual updates available
+    if echo "$UPDATE_OUTPUT" | grep -qi "no new software available"; then
+        print_success "macOS is up to date"
+    else
+        echo ""
+        read -p "$(echo -e "${YELLOW}Install macOS updates now? [y/N]:${NC} ")" -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            print_info "Installing updates (this may take a while)..."
+            sudo softwareupdate -i -a
+            print_success "macOS updates installed"
+        fi
     fi
 else
     print_info "Skipping macOS updates (--skip-macos flag)"
