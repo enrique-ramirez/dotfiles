@@ -32,6 +32,8 @@ for arg in "$@"; do
             echo "  1. Run: xcode-select --install"
             echo "  2. Wait for Command Line Tools to install"
             echo "  3. Clone this repo and run ./install.sh"
+            echo ""
+            echo "To update existing installations, run: ./update.sh"
             exit 0
             ;;
     esac
@@ -363,12 +365,13 @@ if [ -n "$QLVIDEO_APP" ]; then
 
     # Check if QLVideo plugin is already registered by looking for its plugin
     QLVIDEO_PLUGIN_REGISTERED=false
-    if [ -d "$QLVIDEO_APP/Contents/Library/QuickLook" ] || \
-       qlmanage -m 2>/dev/null | grep -q "QLVideo"; then
+    if qlmanage -m 2>/dev/null | grep -qi "qlvideo"; then
         QLVIDEO_PLUGIN_REGISTERED=true
     fi
 
-    if [ "$DRY_RUN" = true ]; then
+    if [ "$QLVIDEO_PLUGIN_REGISTERED" = true ]; then
+        print_success "QLVideo plugin already registered"
+    elif [ "$DRY_RUN" = true ]; then
         print_dry_run "Would run QuickLook Video app to register plugin"
     else
         # Run the app once to register the QuickLook plugin with macOS
@@ -426,41 +429,59 @@ elif [ -d "$HOME/Applications/Ghostty.app" ]; then
 fi
 
 if [ -n "$GHOSTTY_APP" ] && [ "$DRY_RUN" = false ]; then
-    print_info "Ghostty is installed!"
-    echo ""
-    echo -e "${YELLOW}${BOLD}⚡ Global Hotkey Setup (Ctrl+\`)${NC}"
-    echo -e "For the global hotkey to work, Ghostty needs:"
-    echo -e "  1. ${BOLD}Accessibility permissions${NC} - macOS will prompt when Ghostty opens"
-    echo -e "  2. ${BOLD}Running in background${NC} - Configure 'Launch at Login' in Ghostty settings"
-    echo ""
+    # Check if Ghostty already has accessibility permissions
+    # We check if Ghostty is in the TCC database for accessibility
+    GHOSTTY_HAS_ACCESSIBILITY=false
+    if sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
+        "SELECT client FROM access WHERE service='kTCCServiceAccessibility' AND client LIKE '%ghostty%'" 2>/dev/null | grep -qi ghostty; then
+        GHOSTTY_HAS_ACCESSIBILITY=true
+    fi
 
-    # Add Ghostty to Login Items (only if not already added)
+    # Check if already in Login Items
+    GHOSTTY_IN_LOGIN_ITEMS=false
     if osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null | grep -q "Ghostty"; then
+        GHOSTTY_IN_LOGIN_ITEMS=true
+    fi
+
+    # If both are configured, just report success
+    if [ "$GHOSTTY_IN_LOGIN_ITEMS" = true ]; then
         print_success "Ghostty already in Login Items"
+        if [ "$GHOSTTY_HAS_ACCESSIBILITY" = true ]; then
+            print_success "Ghostty has accessibility permissions"
+        fi
     else
+        # First time setup - show full instructions
+        print_info "Ghostty is installed!"
+        echo ""
+        echo -e "${YELLOW}${BOLD}⚡ Global Hotkey Setup (Ctrl+\`)${NC}"
+        echo -e "For the global hotkey to work, Ghostty needs:"
+        echo -e "  1. ${BOLD}Accessibility permissions${NC} - macOS will prompt when Ghostty opens"
+        echo -e "  2. ${BOLD}Running in background${NC} - Configure 'Launch at Login' in Ghostty settings"
+        echo ""
+
         print_info "Adding Ghostty to Login Items..."
         osascript -e "tell application \"System Events\" to make login item at end with properties {path:\"$GHOSTTY_APP\", hidden:true}" 2>/dev/null && \
             print_success "Ghostty will launch at login (hidden)" || \
             print_warning "Could not add to Login Items - add manually in System Settings"
-    fi
 
-    echo ""
-    read -p "$(echo -e "${YELLOW}Open Ghostty now to grant permissions? [Y/n]: ${NC}")" -n 1 -r
-    echo
+        echo ""
+        read -p "$(echo -e "${YELLOW}Open Ghostty now to grant permissions? [Y/n]: ${NC}")" -n 1 -r
+        echo
 
-    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-        print_info "Opening Ghostty..."
-        open -a Ghostty
-        echo ""
-        echo -e "${CYAN}╔════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${CYAN}║  When Ghostty opens, macOS will ask for Accessibility      ║${NC}"
-        echo -e "${CYAN}║  permissions. Click 'Open System Settings' and enable it. ║${NC}"
-        echo -e "${CYAN}║                                                            ║${NC}"
-        echo -e "${CYAN}║  After that, try pressing ${BOLD}Ctrl+\`${NC}${CYAN} to toggle Ghostty!      ║${NC}"
-        echo -e "${CYAN}╚════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
-        read -p "$(echo -e "${YELLOW}Press Enter once you have granted permissions...${NC}")" -r
-        print_success "Ghostty is ready with global hotkey!"
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            print_info "Opening Ghostty..."
+            open -a Ghostty
+            echo ""
+            echo -e "${CYAN}╔════════════════════════════════════════════════════════════╗${NC}"
+            echo -e "${CYAN}║  When Ghostty opens, macOS will ask for Accessibility      ║${NC}"
+            echo -e "${CYAN}║  permissions. Click 'Open System Settings' and enable it. ║${NC}"
+            echo -e "${CYAN}║                                                            ║${NC}"
+            echo -e "${CYAN}║  After that, try pressing ${BOLD}Ctrl+\`${NC}${CYAN} to toggle Ghostty!      ║${NC}"
+            echo -e "${CYAN}╚════════════════════════════════════════════════════════════╝${NC}"
+            echo ""
+            read -p "$(echo -e "${YELLOW}Press Enter once you have granted permissions...${NC}")" -r
+            print_success "Ghostty is ready with global hotkey!"
+        fi
     fi
 else
     if [ "$DRY_RUN" = true ]; then
@@ -556,7 +577,7 @@ else
         # Fetch and install latest NVM version dynamically
         NVM_LATEST=$(curl -fsSL https://api.github.com/repos/nvm-sh/nvm/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
         if [ -z "$NVM_LATEST" ]; then
-            NVM_LATEST="v0.40.3"  # Fallback if API fails
+            NVM_LATEST="v0.40.4"  # Fallback if API fails
             print_warning "Could not fetch latest NVM version, using $NVM_LATEST"
         fi
         curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_LATEST}/install.sh" | bash
@@ -818,6 +839,45 @@ if [ -d "$GCLOUD_PATH" ]; then
 fi
 
 ###############################################################################
+# Cloud SQL Auth Proxy
+# https://cloud.google.com/sql/docs/mysql/connect-auth-proxy
+###############################################################################
+
+print_header "Cloud SQL Auth Proxy"
+
+CLOUD_SQL_PROXY_PATH="/usr/local/bin/cloud-sql-proxy"
+
+if command_exists cloud-sql-proxy; then
+    print_success "Already installed: $(cloud-sql-proxy --version 2>&1 | head -1)"
+else
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would download and install Cloud SQL Auth Proxy"
+    else
+        print_info "Downloading Cloud SQL Auth Proxy..."
+
+        # Determine the correct binary for the architecture
+        if [[ $(uname -m) == "arm64" ]]; then
+            PROXY_URL="https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.21.0/cloud-sql-proxy.darwin.arm64"
+        else
+            PROXY_URL="https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.21.0/cloud-sql-proxy.darwin.amd64"
+        fi
+
+        # Download to a temp location first, then move with sudo
+        TEMP_PROXY="/tmp/cloud-sql-proxy"
+        if curl -fsSL "$PROXY_URL" -o "$TEMP_PROXY"; then
+            chmod +x "$TEMP_PROXY"
+            print_info "Installing to /usr/local/bin (requires sudo)..."
+            sudo mv "$TEMP_PROXY" "$CLOUD_SQL_PROXY_PATH"
+            print_success "Cloud SQL Auth Proxy installed"
+            print_info "Version: $(cloud-sql-proxy --version 2>&1 | head -1)"
+        else
+            print_warning "Failed to download Cloud SQL Auth Proxy"
+            print_info "You can install it manually later from: https://cloud.google.com/sql/docs/mysql/connect-auth-proxy"
+        fi
+    fi
+fi
+
+###############################################################################
 # Configure git diff-so-fancy
 ###############################################################################
 
@@ -899,22 +959,36 @@ SSH_KEY_PUB="$HOME/.ssh/id_ed25519.pub"
 
 if [ -f "$SSH_KEY_PATH" ]; then
     print_success "SSH key already exists at $SSH_KEY_PATH"
-    print_info "Your public key:"
-    echo ""
-    cat "$SSH_KEY_PUB"
-    echo ""
 
-    # Copy to clipboard
-    cat "$SSH_KEY_PUB" | pbcopy
-    print_success "Public key copied to clipboard! 📋"
-
+    # Check if the key is already added to GitHub
+    SSH_KEY_ADDED_TO_GITHUB=false
     if [ "$DRY_RUN" = false ]; then
+        # Test SSH connection to GitHub - if it succeeds, the key is already added
+        if ssh -T git@github.com -o BatchMode=yes -o StrictHostKeyChecking=accept-new 2>&1 | grep -q "successfully authenticated"; then
+            SSH_KEY_ADDED_TO_GITHUB=true
+        fi
+    fi
+
+    if [ "$SSH_KEY_ADDED_TO_GITHUB" = true ]; then
+        print_success "SSH key is already added to GitHub"
+    else
+        print_info "Your public key:"
         echo ""
-        read -p "$(echo -e "${YELLOW}Open GitHub to add this key? [Y/n]: ${NC}")" -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            open "https://github.com/settings/ssh/new"
-            print_info "Just paste (⌘V) and click 'Add SSH key'!"
+        cat "$SSH_KEY_PUB"
+        echo ""
+
+        # Copy to clipboard
+        cat "$SSH_KEY_PUB" | pbcopy
+        print_success "Public key copied to clipboard! 📋"
+
+        if [ "$DRY_RUN" = false ]; then
+            echo ""
+            read -p "$(echo -e "${YELLOW}Open GitHub to add this key? [Y/n]: ${NC}")" -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                open "https://github.com/settings/ssh/new"
+                print_info "Just paste (⌘V) and click 'Add SSH key'!"
+            fi
         fi
     fi
 else
@@ -1100,21 +1174,7 @@ echo -e "  2. ${BOLD}Add SSH key to GitHub${NC} (if not done): ${CYAN}https://gi
 echo -e "  3. ${BOLD}Configure Ghostty${NC}: Settings are already linked from dotfiles"
 echo -e "  4. ${BOLD}Install optional apps${NC} from the links above\n"
 
-# Optional OS update
-echo ""
-read -p "$(echo -e "${YELLOW}Do you want to update macOS now? [y/N]:${NC}")" -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    print_info "Checking for macOS updates..."
-    softwareupdate -l
-    echo ""
-    read -p "$(echo -e "${YELLOW}Install all available updates? [y/N]:${NC}")" -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        print_info "Installing updates (this may take a while)..."
-        sudo softwareupdate -i -a
-        print_success "Updates installed"
-    fi
-fi
+echo -e "${CYAN}To keep everything up to date, run:${NC}"
+echo -e "  ${YELLOW}./update.sh${NC}  - Updates Homebrew, Node.js, pnpm, Oh My Zsh, and macOS\n"
 
-echo -e "\n${GREEN}Enjoy your new setup!${NC} 🚀\n"
+echo -e "${GREEN}Enjoy your new setup!${NC} 🚀\n"
