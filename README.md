@@ -48,7 +48,7 @@ cd /path/to/dotfiles
 ### 💻 Applications (via Homebrew Casks)
 
 **Development:**
-- VS Code, Cursor, Ghostty, Docker
+- Zed, Ghostty, Docker
 
 **Security:**
 - 1Password
@@ -174,10 +174,7 @@ open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibil
 
 ## Editor Settings
 
-**VS Code** and **Cursor** have built-in Settings Sync — no need to manage in dotfiles.
-
-After installation:
-- **Cursor:** Settings → Import from VS Code
+**Zed** settings are managed in this repo at `configs/zed/settings.json` and symlinked to `~/.config/zed/settings.json` by `install.sh`, so they stay in sync across machines via git.
 
 ## Troubleshooting
 

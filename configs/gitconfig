@@ -1,9 +1,10 @@
 [user]
 	name = Enrique Ramírez
 	email = hello@enrique-ramirez.com
+	signingkey = /Users/enriqueramirez/.ssh/id_ed25519.pub
 
 [core]
-	editor = cursor --wait
+	editor = zed --wait
 	pager = diff-so-fancy | less --tabs=4 -RF
 
 [init]
@@ -41,4 +42,9 @@
 	old = red bold
 	new = green bold
 	whitespace = red reverse
-
+[gpg]
+	format = ssh
+[gpg "ssh"]
+	allowedSignersFile = /Users/enriqueramirez/.ssh/allowed_signers
+[commit]
+	gpgsign = true

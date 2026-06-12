@@ -24,6 +24,7 @@ brew "mas"              # Mac App Store CLI (for installing App Store apps)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 brew "pyenv"            # Python version manager
+brew "libpq"            # PostgreSQL client tools (psql, pg_dump, pg_restore)
 
 # Note: google-cloud-sdk is installed via official installer in install.sh
 # (Homebrew formula is unreliable/deprecated)
@@ -33,10 +34,11 @@ brew "pyenv"            # Python version manager
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Development
-cask "visual-studio-code"
-cask "cursor"
+cask "zed"              # Zed editor
 cask "ghostty"
 cask "docker-desktop"   # Docker Desktop (PostgreSQL etc. via containers)
+# cask "visual-studio-code"  # Removed 2026-06: no longer trusted, settings kept on disk
+# cask "cursor"              # Removed 2026-06: no longer trusted, settings kept on disk
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECURITY & PASSWORDS

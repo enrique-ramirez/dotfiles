@@ -46,12 +46,12 @@ alias dps='docker ps'
 alias dimg='docker images'
 
 # Quick edit configs
-alias zshrc='${EDITOR:-cursor} ~/.zshrc'
+alias zshrc='${EDITOR:-zed} ~/.zshrc'
 alias dotfiles='cd ~/Projects/dotfiles'
 
 # ===== Environment Variables =====
-export EDITOR='cursor --wait'
-export VISUAL='cursor'
+export EDITOR='zed --wait'
+export VISUAL='zed'
 
 # ===== Path additions =====
 # Add local bin to path (for user-installed binaries)

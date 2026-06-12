@@ -112,7 +112,6 @@ cask_app_installed() {
     # Map cask names to actual .app names (only for non-standard cases)
     local app_name
     case "$cask_name" in
-        "visual-studio-code") app_name="Visual Studio Code" ;;
         "google-chrome") app_name="Google Chrome" ;;
         "docker-desktop") app_name="Docker" ;;
         "zen") app_name="Zen Browser" ;;
@@ -491,6 +490,38 @@ else
 fi
 
 ###############################################################################
+# Zed Editor Setup (config symlink for cross-machine sync)
+###############################################################################
+
+print_header "Zed Editor Setup"
+
+ZED_CONFIG_DIR="$HOME/.config/zed"
+ZED_SETTINGS_SRC="$DOTFILES_DIR/configs/zed/settings.json"
+ZED_SETTINGS_DST="$ZED_CONFIG_DIR/settings.json"
+
+if [ -f "$ZED_SETTINGS_SRC" ]; then
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would symlink Zed settings from dotfiles"
+    else
+        # Check if already correctly symlinked
+        if [ -L "$ZED_SETTINGS_DST" ] && [ "$(readlink "$ZED_SETTINGS_DST")" = "$ZED_SETTINGS_SRC" ]; then
+            print_success "Zed settings already linked"
+        else
+            mkdir -p "$ZED_CONFIG_DIR"
+            # Backup existing settings only if it's a regular file
+            if [ -f "$ZED_SETTINGS_DST" ] && [ ! -L "$ZED_SETTINGS_DST" ]; then
+                mv "$ZED_SETTINGS_DST" "$ZED_SETTINGS_DST.backup.$(date +%Y%m%d_%H%M%S)"
+                print_info "Backed up existing Zed settings"
+            fi
+            # Remove existing symlink if pointing elsewhere
+            [ -L "$ZED_SETTINGS_DST" ] && rm "$ZED_SETTINGS_DST"
+            ln -sf "$ZED_SETTINGS_SRC" "$ZED_SETTINGS_DST"
+            print_success "Zed settings linked"
+        fi
+    fi
+fi
+
+###############################################################################
 # Install Oh My Zsh
 ###############################################################################
 
@@ -578,7 +609,7 @@ else
         # Fetch and install latest NVM version dynamically
         NVM_LATEST=$(curl -fsSL https://api.github.com/repos/nvm-sh/nvm/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
         if [ -z "$NVM_LATEST" ]; then
-            NVM_LATEST="v0.40.4"  # Fallback if API fails
+            NVM_LATEST="v0.40.5"  # Fallback if API fails
             print_warning "Could not fetch latest NVM version, using $NVM_LATEST"
         fi
         curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_LATEST}/install.sh" | bash
@@ -856,11 +887,18 @@ else
     else
         print_info "Downloading Cloud SQL Auth Proxy..."
 
+        # Fetch latest v2.x version dynamically (same approach as update.sh)
+        PROXY_VERSION=$(curl -fsSL "https://api.github.com/repos/GoogleCloudPlatform/cloud-sql-proxy/releases" 2>/dev/null | grep '"tag_name"' | grep -E '"v2\.' | head -1 | sed -E 's/.*"(v[^"]+)".*/\1/')
+        if [ -z "$PROXY_VERSION" ]; then
+            PROXY_VERSION="v2.22.1"  # Fallback if API fails
+            print_warning "Could not fetch latest version, using $PROXY_VERSION"
+        fi
+
         # Determine the correct binary for the architecture
         if [[ $(uname -m) == "arm64" ]]; then
-            PROXY_URL="https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.21.0/cloud-sql-proxy.darwin.arm64"
+            PROXY_URL="https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/${PROXY_VERSION}/cloud-sql-proxy.darwin.arm64"
         else
-            PROXY_URL="https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.21.0/cloud-sql-proxy.darwin.amd64"
+            PROXY_URL="https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/${PROXY_VERSION}/cloud-sql-proxy.darwin.amd64"
         fi
 
         # Download to a temp location first, then move with sudo
@@ -876,6 +914,28 @@ else
             print_info "You can install it manually later from: https://cloud.google.com/sql/docs/mysql/connect-auth-proxy"
         fi
     fi
+fi
+
+###############################################################################
+# Link libpq (PostgreSQL client tools)
+# libpq is keg-only, so we need to force-link it for psql to be on PATH
+###############################################################################
+
+print_header "PostgreSQL Client Tools (libpq)"
+if brew list libpq &>/dev/null 2>&1; then
+    if command_exists psql; then
+        print_success "psql already available on PATH"
+    else
+        if [ "$DRY_RUN" = true ]; then
+            print_dry_run "Would run: brew link --force libpq"
+        else
+            print_info "Linking libpq to make psql available..."
+            brew link --force libpq
+            print_success "libpq linked (psql, pg_dump, pg_restore now on PATH)"
+        fi
+    fi
+else
+    print_warning "libpq not installed (should be installed via Brewfile)"
 fi
 
 ###############################################################################
@@ -943,7 +1003,7 @@ else
             git config --global user.email "$GIT_EMAIL"
         fi
 
-        git config --global core.editor "cursor --wait"
+        git config --global core.editor "zed --wait"
         git config --global init.defaultBranch "main"
         print_success "Git configured"
     fi
@@ -1153,7 +1213,7 @@ echo -e "${GREEN}All applications were installed automatically via Homebrew!${NC
 
 echo -e "${CYAN}Installed:${NC}"
 echo -e "   ✓ 1Password, Chrome, Zen Browser"
-echo -e "   ✓ VS Code, Cursor, Ghostty, Docker"
+echo -e "   ✓ Zed, Ghostty, Docker"
 echo -e "   ✓ Figma, Slack, ClickUp, Dropbox, Zoom"
 echo -e "   ✓ Spotify, IINA (media player)"
 echo -e "   ✓ QLVideo (QuickLook for webm, mkv, etc.)"
