@@ -36,9 +36,10 @@ brew "libpq"            # PostgreSQL client tools (psql, pg_dump, pg_restore)
 # Development
 cask "zed"              # Zed editor
 cask "ghostty"
-cask "docker-desktop"   # Docker Desktop (PostgreSQL etc. via containers)
+cask "orbstack"         # Docker engine + Linux VMs (lighter Docker Desktop replacement)
 # cask "visual-studio-code"  # Removed 2026-06: no longer trusted, settings kept on disk
 # cask "cursor"              # Removed 2026-06: no longer trusted, settings kept on disk
+# cask "docker-desktop"      # Replaced 2026-06 by orbstack
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECURITY & PASSWORDS
@@ -86,7 +87,7 @@ cask "the-unarchiver"   # Extract archives (zip, rar, 7z, tar, etc.)
 # QUICKLOOK PLUGINS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-cask "qlvideo"          # QuickLook support for webm, mkv, and other video formats
+cask "quicklook-video"  # QuickLook support for webm, mkv, and other video formats (formerly qlvideo)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAC APP STORE (requires being signed into App Store)

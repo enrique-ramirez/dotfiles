@@ -99,6 +99,10 @@ command_exists() {
     command -v "$1" &> /dev/null
 }
 
+# Supply-chain cooldown: only install brew packages whose current version has
+# been in the tap for at least COOLDOWN_HOURS (default 48)
+source "$DOTFILES_DIR/lib/cooldown.sh"
+
 # Check if a cask application is already installed (manually or via Homebrew)
 # Returns 0 if installed, 1 if not
 cask_app_installed() {
@@ -113,10 +117,10 @@ cask_app_installed() {
     local app_name
     case "$cask_name" in
         "google-chrome") app_name="Google Chrome" ;;
-        "docker-desktop") app_name="Docker" ;;
+        "orbstack") app_name="OrbStack" ;;
         "zen") app_name="Zen Browser" ;;
         "1password") app_name="1Password" ;;
-        "qlvideo") app_name="QuickLook Video" ;;
+        "quicklook-video") app_name="QuickLook Video" ;;
         "iina") app_name="IINA" ;;
         "the-unarchiver") app_name="The Unarchiver" ;;
         *)
@@ -268,11 +272,20 @@ if [ "$DRY_RUN" = false ]; then
     print_info "If not signed in, these will be skipped and can be installed later."
 fi
 
+# jq powers the cooldown checks but is itself installed via the Brewfile,
+# so bootstrap it first on fresh machines
+if ! command_exists jq && [ "$DRY_RUN" = false ]; then
+    print_info "Installing jq first (needed for release cooldown checks)..."
+    brew install jq
+fi
+
 if [ -f "$DOTFILES_DIR/Brewfile" ]; then
-    # Create a filtered Brewfile that excludes already-installed casks
+    # Create a filtered Brewfile that excludes already-installed casks and
+    # defers packages whose current version is younger than the cooldown.
     # This makes the script idempotent even for manually-installed apps
     FILTERED_BREWFILE="$DOTFILES_DIR/.Brewfile.filtered"
     SKIPPED_CASKS=()
+    DEFERRED_PKGS=()
 
     # Clear any existing filtered file
     > "$FILTERED_BREWFILE"
@@ -288,11 +301,32 @@ if [ -f "$DOTFILES_DIR/Brewfile" ]; then
                 SKIPPED_CASKS+=("$cask_name")
                 # Add as comment to show it was skipped
                 echo "# SKIPPED (already installed): $line" >> "$FILTERED_BREWFILE"
+            elif command_exists jq; then
+                rc=0; brew_cooldown_ok cask "$cask_name" || rc=$?
+                if [ "$rc" -eq 0 ]; then
+                    echo "$line" >> "$FILTERED_BREWFILE"
+                else
+                    DEFERRED_PKGS+=("$cask_name")
+                    echo "# DEFERRED (cooldown): $line" >> "$FILTERED_BREWFILE"
+                fi
             else
                 echo "$line" >> "$FILTERED_BREWFILE"
             fi
+        elif [[ "$line" =~ ^brew[[:space:]]+\"([^\"]+)\" ]]; then
+            formula_name="${BASH_REMATCH[1]}"
+            if brew list --formula "$formula_name" &>/dev/null || ! command_exists jq; then
+                echo "$line" >> "$FILTERED_BREWFILE"
+            else
+                rc=0; brew_cooldown_ok formula "$formula_name" || rc=$?
+                if [ "$rc" -eq 0 ]; then
+                    echo "$line" >> "$FILTERED_BREWFILE"
+                else
+                    DEFERRED_PKGS+=("$formula_name")
+                    echo "# DEFERRED (cooldown): $line" >> "$FILTERED_BREWFILE"
+                fi
+            fi
         else
-            # Keep all other lines (brew, mas, comments, etc.)
+            # Keep all other lines (mas, comments, etc.)
             echo "$line" >> "$FILTERED_BREWFILE"
         fi
     done < "$DOTFILES_DIR/Brewfile"
@@ -300,6 +334,12 @@ if [ -f "$DOTFILES_DIR/Brewfile" ]; then
     # Report skipped casks
     if [ ${#SKIPPED_CASKS[@]} -gt 0 ]; then
         print_success "Skipping already-installed apps: ${SKIPPED_CASKS[*]}"
+    fi
+
+    # Report packages deferred by the release cooldown
+    if [ ${#DEFERRED_PKGS[@]} -gt 0 ]; then
+        print_warning "Deferred (version <${COOLDOWN_HOURS}h old or age unknown): ${DEFERRED_PKGS[*]}"
+        print_info "Re-run ./install.sh (or ./update.sh) after the cooldown to install them"
     fi
 
     if [ "$DRY_RUN" = true ]; then
@@ -346,6 +386,54 @@ if [ "$DRY_RUN" = false ] && command_exists xcodebuild; then
         print_info "Accepting Xcode license agreement..."
         sudo xcodebuild -license accept
         print_success "Xcode license accepted"
+    fi
+fi
+
+###############################################################################
+# OrbStack Setup (Docker Desktop replacement)
+###############################################################################
+
+ORBSTACK_INSTALLED=false
+if [ -d "/Applications/OrbStack.app" ] || [ -d "$HOME/Applications/OrbStack.app" ]; then
+    ORBSTACK_INSTALLED=true
+fi
+
+if [ "$ORBSTACK_INSTALLED" = true ]; then
+    print_header "OrbStack (Docker engine)"
+
+    # First launch installs the docker CLI and switches the docker context
+    if [ -d "$HOME/.orbstack" ]; then
+        print_success "OrbStack already set up"
+    elif [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would launch OrbStack to set up the docker CLI"
+    else
+        print_info "Launching OrbStack to set up the docker CLI..."
+        open -a OrbStack
+        print_success "OrbStack launched (docker context switches automatically)"
+    fi
+
+    # Offer to remove Docker Desktop now that OrbStack replaces it
+    if [ -d "/Applications/Docker.app" ]; then
+        if [ "$DRY_RUN" = true ]; then
+            print_dry_run "Would offer to uninstall Docker Desktop"
+        else
+            print_warning "Docker Desktop is still installed"
+            read -p "$(echo -e "${YELLOW}Uninstall Docker Desktop? This deletes its containers/images/volumes. [y/N]: ${NC}")" -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                osascript -e 'quit app "Docker"' 2>/dev/null || true
+                if brew list --cask docker-desktop &>/dev/null; then
+                    print_info "Uninstalling Docker Desktop (app + data)..."
+                    brew uninstall --zap --cask docker-desktop
+                    print_success "Docker Desktop removed"
+                else
+                    print_warning "Docker Desktop was not installed via Homebrew"
+                    print_info "Remove it via Docker Desktop → Troubleshoot → Uninstall, then drag Docker.app to Trash"
+                fi
+            else
+                print_info "Keeping Docker Desktop (remove later with: brew uninstall --zap --cask docker-desktop)"
+            fi
+        fi
     fi
 fi
 
@@ -1213,7 +1301,7 @@ echo -e "${GREEN}All applications were installed automatically via Homebrew!${NC
 
 echo -e "${CYAN}Installed:${NC}"
 echo -e "   ✓ 1Password, Chrome, Zen Browser"
-echo -e "   ✓ Zed, Ghostty, Docker"
+echo -e "   ✓ Zed, Ghostty, OrbStack"
 echo -e "   ✓ Figma, Slack, ClickUp, Dropbox, Zoom"
 echo -e "   ✓ Spotify, IINA (media player)"
 echo -e "   ✓ QLVideo (QuickLook for webm, mkv, etc.)"

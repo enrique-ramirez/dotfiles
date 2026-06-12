@@ -52,6 +52,12 @@ command_exists() {
     command -v "$1" &> /dev/null
 }
 
+DOTFILES_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Supply-chain cooldown: only upgrade/install brew packages whose current
+# version has been in the tap for at least COOLDOWN_HOURS (default 48)
+source "$DOTFILES_DIR/lib/cooldown.sh"
+
 echo -e "\n${YELLOW}Updating your Mac! 🔄${NC}\n"
 
 # Update Homebrew
@@ -59,16 +65,97 @@ print_header "Updating Homebrew"
 brew update
 print_success "Homebrew updated"
 
-# Upgrade packages
-print_header "Upgrading Homebrew packages"
-brew upgrade
-print_success "All packages upgraded"
+# Upgrade packages (respecting the release cooldown)
+print_header "Upgrading Homebrew packages (${COOLDOWN_HOURS}h cooldown)"
+if ! command_exists jq; then
+    print_warning "jq not found — cannot check release ages, upgrading everything"
+    brew upgrade
+    print_success "All packages upgraded"
+else
+    OUTDATED_FORMULAE=($(brew outdated --formula --quiet))
+    OUTDATED_CASKS=($(brew outdated --cask --quiet))
 
-# Install any new packages from Brewfile
+    SAFE_FORMULAE=()
+    SAFE_CASKS=()
+    DEFERRED=()
+
+    for name in "${OUTDATED_FORMULAE[@]}"; do
+        rc=0; brew_cooldown_ok formula "$name" || rc=$?
+        if [ "$rc" -eq 0 ]; then
+            SAFE_FORMULAE+=("$name")
+        elif [ "$rc" -eq 1 ]; then
+            print_warning "Deferring $name (new version is <${COOLDOWN_HOURS}h old)"
+            DEFERRED+=("$name")
+        else
+            print_warning "Deferring $name (could not determine release age)"
+            DEFERRED+=("$name")
+        fi
+    done
+
+    for name in "${OUTDATED_CASKS[@]}"; do
+        rc=0; brew_cooldown_ok cask "$name" || rc=$?
+        if [ "$rc" -eq 0 ]; then
+            SAFE_CASKS+=("$name")
+        elif [ "$rc" -eq 1 ]; then
+            print_warning "Deferring $name (new version is <${COOLDOWN_HOURS}h old)"
+            DEFERRED+=("$name")
+        else
+            print_warning "Deferring $name (could not determine release age)"
+            DEFERRED+=("$name")
+        fi
+    done
+
+    if [ ${#SAFE_FORMULAE[@]} -gt 0 ]; then
+        brew upgrade --formula "${SAFE_FORMULAE[@]}"
+    fi
+    if [ ${#SAFE_CASKS[@]} -gt 0 ]; then
+        brew upgrade --cask "${SAFE_CASKS[@]}"
+    fi
+
+    if [ ${#DEFERRED[@]} -gt 0 ]; then
+        print_info "Deferred (retried automatically on next update): ${DEFERRED[*]}"
+    fi
+    print_success "Eligible packages upgraded"
+fi
+
+# Install any new packages from Brewfile (new entries respect the cooldown too)
 print_header "Checking Brewfile"
-DOTFILES_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DOTFILES_DIR"
-brew bundle install
+if command_exists jq; then
+    FILTERED_BREWFILE="$DOTFILES_DIR/.Brewfile.filtered"
+    > "$FILTERED_BREWFILE"
+    INSTALLED_FORMULAE=" $(brew list --formula 2>/dev/null | tr '\n' ' ') "
+    INSTALLED_CASKS=" $(brew list --cask 2>/dev/null | tr '\n' ' ') "
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        pkg_type=""
+        pkg_name=""
+        if [[ "$line" =~ ^brew[[:space:]]+\"([^\"]+)\" ]]; then
+            pkg_name="${BASH_REMATCH[1]}"
+            [[ "$INSTALLED_FORMULAE" != *" $pkg_name "* ]] && pkg_type="formula"
+        elif [[ "$line" =~ ^cask[[:space:]]+\"([^\"]+)\" ]]; then
+            pkg_name="${BASH_REMATCH[1]}"
+            [[ "$INSTALLED_CASKS" != *" $pkg_name "* ]] && pkg_type="cask"
+        fi
+
+        if [ -n "$pkg_type" ]; then
+            rc=0; brew_cooldown_ok "$pkg_type" "$pkg_name" || rc=$?
+            if [ "$rc" -eq 0 ]; then
+                echo "$line" >> "$FILTERED_BREWFILE"
+            else
+                print_warning "Deferring new package $pkg_name (cooldown not met or age unknown)"
+                echo "# DEFERRED (cooldown): $line" >> "$FILTERED_BREWFILE"
+            fi
+        else
+            echo "$line" >> "$FILTERED_BREWFILE"
+        fi
+    done < "$DOTFILES_DIR/Brewfile"
+
+    brew bundle install --file="$FILTERED_BREWFILE"
+    rm -f "$FILTERED_BREWFILE"
+else
+    brew bundle install
+fi
 print_success "Brewfile packages synced"
 
 # Cleanup

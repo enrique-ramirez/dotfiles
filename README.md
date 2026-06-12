@@ -48,7 +48,7 @@ cd /path/to/dotfiles
 ### 💻 Applications (via Homebrew Casks)
 
 **Development:**
-- Zed, Ghostty, Docker
+- Zed, Ghostty, OrbStack (Docker)
 
 **Security:**
 - 1Password
@@ -175,6 +175,15 @@ open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibil
 ## Editor Settings
 
 **Zed** settings are managed in this repo at `configs/zed/settings.json` and symlinked to `~/.config/zed/settings.json` by `install.sh`, so they stay in sync across machines via git.
+
+## Supply-Chain Cooldown
+
+Both `install.sh` and `update.sh` refuse to install or upgrade a Homebrew package whose current version landed in the tap less than **48 hours** ago (compromised releases are usually detected and pulled well within 24h). Too-fresh packages are *deferred*: upgrades keep the currently installed version and installs wait — both retry automatically on the next run.
+
+- Implemented in `lib/cooldown.sh`, which checks the last commit date of each formula/cask file in the Homebrew tap via the GitHub API.
+- Homebrew taps only carry one version per package, so deferring (rather than falling back to an older version, as npm can) is the only option.
+- Override the window with `COOLDOWN_HOURS=24 ./update.sh`; set `GITHUB_TOKEN` to avoid GitHub API rate limits (60 req/h anonymous).
+- If the age of a package can't be determined (API failure, rate limit), it is deferred — the check fails safe.
 
 ## Troubleshooting
 
