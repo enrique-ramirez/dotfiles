@@ -16,17 +16,22 @@ set -e  # Exit on error
 
 # Parse arguments
 DRY_RUN=false
+SHOW_SUMMARY=true
 for arg in "$@"; do
     case $arg in
         --dry-run)
             DRY_RUN=true
             ;;
+        --no-summary)
+            SHOW_SUMMARY=false
+            ;;
         --help)
-            echo "Usage: ./install.sh [--dry-run]"
+            echo "Usage: ./install.sh [--dry-run] [--no-summary]"
             echo ""
             echo "Options:"
-            echo "  --dry-run    Show what would be done without making changes"
-            echo "  --help       Show this help message"
+            echo "  --dry-run     Show what would be done without making changes"
+            echo "  --no-summary  Skip the post-install summary (used by update.sh)"
+            echo "  --help        Show this help message"
             echo ""
             echo "Bootstrap (fresh Mac):"
             echo "  1. Run: xcode-select --install"
@@ -131,6 +136,22 @@ cask_app_installed() {
 
     # Check both Applications folders
     [ -d "/Applications/${app_name}.app" ] || [ -d "$HOME/Applications/${app_name}.app" ]
+}
+
+# Load NVM into this session without killing the script if it refuses.
+# nvm.sh aborts when npm_config_prefix is set (Zed, some npm setups export it),
+# and under `set -e` that would take the whole install down with it.
+load_nvm() {
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] || return 1
+
+    # nvm refuses to load alongside this; it is per-process, so unsetting is safe
+    unset npm_config_prefix
+
+    \. "$NVM_DIR/nvm.sh" || {
+        print_warning "Could not load NVM — skipping Node steps"
+        return 1
+    }
 }
 
 # Add line to file if not already present
@@ -441,6 +462,22 @@ fi
 # QLVideo Setup (QuickLook support for webm, mkv, etc.)
 ###############################################################################
 
+# "qlvideo" is the former name of the "quicklook-video" cask. Having both
+# installed registers two QuickLook generators for the same formats.
+if brew list --cask qlvideo &>/dev/null; then
+    print_header "Legacy qlvideo cask"
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would uninstall the legacy 'qlvideo' cask (superseded by quicklook-video)"
+    else
+        print_info "Removing legacy 'qlvideo' cask (superseded by quicklook-video)..."
+        if brew uninstall --cask qlvideo; then
+            print_success "Legacy qlvideo removed"
+        else
+            print_warning "Could not remove qlvideo — remove it manually with: brew uninstall --cask qlvideo"
+        fi
+    fi
+fi
+
 QLVIDEO_APP=""
 if [ -d "/Applications/QuickLook Video.app" ]; then
     QLVIDEO_APP="/Applications/QuickLook Video.app"
@@ -583,6 +620,36 @@ fi
 
 print_header "Zed Editor Setup"
 
+# Zed is the git editor (configs/gitconfig sets core.editor = "zed --wait"),
+# so the `zed` CLI must be on PATH or every commit/rebase prompt breaks.
+ZED_APP=""
+if [ -d "/Applications/Zed.app" ]; then
+    ZED_APP="/Applications/Zed.app"
+elif [ -d "$HOME/Applications/Zed.app" ]; then
+    ZED_APP="$HOME/Applications/Zed.app"
+fi
+
+if [ -z "$ZED_APP" ]; then
+    print_warning "Zed.app not found (should be installed via Brewfile)"
+    print_info "Install it with: brew install --cask zed"
+elif command_exists zed; then
+    print_success "Zed CLI available at $(command -v zed)"
+else
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would symlink the zed CLI into /usr/local/bin"
+    else
+        print_info "Zed is installed but the 'zed' CLI is not on PATH"
+        print_info "Linking it into /usr/local/bin (requires sudo)..."
+        sudo mkdir -p /usr/local/bin
+        if sudo ln -sf "$ZED_APP/Contents/MacOS/cli" /usr/local/bin/zed; then
+            print_success "zed CLI linked (git editor will work)"
+        else
+            print_warning "Could not link the zed CLI"
+            print_info "Open Zed and run 'cli: install' from the command palette"
+        fi
+    fi
+fi
+
 ZED_CONFIG_DIR="$HOME/.config/zed"
 ZED_SETTINGS_SRC="$DOTFILES_DIR/configs/zed/settings.json"
 ZED_SETTINGS_DST="$ZED_CONFIG_DIR/settings.json"
@@ -708,8 +775,7 @@ fi
 
 # Source NVM for this session
 if [ "$DRY_RUN" = false ]; then
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    load_nvm || true
 fi
 
 ###############################################################################
@@ -718,8 +784,7 @@ fi
 
 print_header "Node.js LTS"
 # Source NVM if not already loaded
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+load_nvm || true
 
 if command_exists node; then
     print_success "Node $(node --version) already installed"
@@ -1027,28 +1092,6 @@ else
 fi
 
 ###############################################################################
-# Configure git diff-so-fancy
-###############################################################################
-
-print_header "Git diff-so-fancy Configuration"
-if command_exists diff-so-fancy; then
-    if git config --global core.pager 2>/dev/null | grep -q "diff-so-fancy"; then
-        print_success "Already configured"
-    else
-        if [ "$DRY_RUN" = true ]; then
-            print_dry_run "Would configure git to use diff-so-fancy"
-        else
-            print_info "Configuring git to use diff-so-fancy..."
-            git config --global core.pager "diff-so-fancy | less --tabs=4 -RF"
-            git config --global interactive.diffFilter "diff-so-fancy --patch"
-            print_success "diff-so-fancy configured"
-        fi
-    fi
-else
-    print_warning "diff-so-fancy not installed, skipping configuration"
-fi
-
-###############################################################################
 # Git configuration
 ###############################################################################
 
@@ -1094,6 +1137,42 @@ else
         git config --global core.editor "zed --wait"
         git config --global init.defaultBranch "main"
         print_success "Git configured"
+    fi
+fi
+
+###############################################################################
+# Verify git editor and pager
+#
+# Runs AFTER the gitconfig symlink so it inspects the config that will actually
+# be in effect — configs/gitconfig already sets both, so this normally just
+# confirms them and only writes when the repo config is missing.
+###############################################################################
+
+print_header "Git Editor & Pager"
+
+if [ "$DRY_RUN" = true ]; then
+    print_dry_run "Would verify git core.editor and diff-so-fancy pager"
+else
+    GIT_EDITOR_SET=$(git config --global core.editor 2>/dev/null || echo "")
+    if [[ "$GIT_EDITOR_SET" == zed* ]]; then
+        print_success "Git editor is '$GIT_EDITOR_SET'"
+    else
+        print_info "Setting Zed as the git editor..."
+        git config --global core.editor "zed --wait"
+        print_success "Git editor set to 'zed --wait'"
+    fi
+
+    if command_exists diff-so-fancy; then
+        if git config --global core.pager 2>/dev/null | grep -q "diff-so-fancy"; then
+            print_success "diff-so-fancy pager configured"
+        else
+            print_info "Configuring git to use diff-so-fancy..."
+            git config --global core.pager "diff-so-fancy | less --tabs=4 -RF"
+            git config --global interactive.diffFilter "diff-so-fancy --patch"
+            print_success "diff-so-fancy configured"
+        fi
+    else
+        print_warning "diff-so-fancy not installed, skipping pager configuration"
     fi
 fi
 
@@ -1216,6 +1295,46 @@ else
 fi
 
 ###############################################################################
+# SSH Commit Signing (allowed_signers)
+#
+# configs/gitconfig turns on commit.gpgsign with gpg.format=ssh and points
+# gpg.ssh.allowedSignersFile at ~/.ssh/allowed_signers. Without that file git
+# can sign but cannot *verify* — `git log --show-signature` reports the key as
+# unknown. Build it from the public key we just set up.
+###############################################################################
+
+print_header "SSH Commit Signing"
+
+ALLOWED_SIGNERS="$HOME/.ssh/allowed_signers"
+
+if [ ! -f "$SSH_KEY_PUB" ]; then
+    print_warning "No SSH public key at $SSH_KEY_PUB, skipping allowed_signers"
+else
+    SIGNING_EMAIL=$(git config --global user.email 2>/dev/null || echo "")
+    if [ -z "$SIGNING_EMAIL" ]; then
+        print_warning "git user.email not set, skipping allowed_signers"
+    else
+        # Match on the key type and body only, so a re-run recognises the
+        # entry regardless of the trailing comment
+        KEY_BODY=$(awk '{print $1" "$2}' "$SSH_KEY_PUB")
+
+        if [ -f "$ALLOWED_SIGNERS" ] && grep -qF "$KEY_BODY" "$ALLOWED_SIGNERS"; then
+            print_success "Signing key already in allowed_signers"
+        elif [ "$DRY_RUN" = true ]; then
+            print_dry_run "Would add this machine's key to $ALLOWED_SIGNERS"
+        else
+            echo "$SIGNING_EMAIL namespaces=\"git\" $(cat "$SSH_KEY_PUB")" >> "$ALLOWED_SIGNERS"
+            chmod 600 "$ALLOWED_SIGNERS"
+            print_success "Added signing key to $ALLOWED_SIGNERS"
+        fi
+
+        print_info "Commits are signed with your SSH key. For GitHub to show them"
+        print_info "as Verified, the same key must ALSO be added as a Signing key:"
+        print_link "https://github.com/settings/ssh/new  (Key type: Signing Key)"
+    fi
+fi
+
+###############################################################################
 # Create Projects directory
 ###############################################################################
 
@@ -1286,6 +1405,12 @@ if [ "$DRY_RUN" = true ]; then
     exit 0
 fi
 
+# Called from update.sh, where the banner and "next steps" would be noise
+if [ "$SHOW_SUMMARY" = false ]; then
+    print_success "Configuration applied"
+    exit 0
+fi
+
 print_header "Installation Complete! 🎉"
 echo -e "\n${GREEN}Your Mac is now set up with development tools!${NC}\n"
 
@@ -1323,7 +1448,7 @@ echo -e "  2. ${BOLD}Add SSH key to GitHub${NC} (if not done): ${CYAN}https://gi
 echo -e "  3. ${BOLD}Configure Ghostty${NC}: Settings are already linked from dotfiles"
 echo -e "  4. ${BOLD}Install optional apps${NC} from the links above\n"
 
-echo -e "${CYAN}To keep everything up to date, run:${NC}"
-echo -e "  ${YELLOW}./update.sh${NC}  - Updates Homebrew, Node.js, pnpm, Oh My Zsh, and macOS\n"
+echo -e "${CYAN}From now on you only need one command:${NC}"
+echo -e "  ${YELLOW}./update.sh${NC}  - Re-applies this config, then updates everything\n"
 
 echo -e "${GREEN}Enjoy your new setup!${NC} 🚀\n"

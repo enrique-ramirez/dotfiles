@@ -2,24 +2,37 @@
 
 ###############################################################################
 # Update Script
-# Updates all packages and tools to their latest versions
-# Usage: ./update.sh [--skip-macos]
+#
+# Runs install.sh first to re-apply configuration (symlinks, shell wiring, any
+# newly added Brewfile entries), then moves every installed tool to its latest
+# version. install.sh only ever converges *presence*; this script converges
+# *versions*. Together they make ./update.sh the single command you need.
+#
+# Usage: ./update.sh [--skip-macos] [--no-install]
 ###############################################################################
 
 set -e
 
 # Parse arguments
 SKIP_MACOS=false
+RUN_INSTALL=true
 for arg in "$@"; do
     case $arg in
         --skip-macos)
             SKIP_MACOS=true
             ;;
+        --no-install)
+            RUN_INSTALL=false
+            ;;
         --help)
-            echo "Usage: ./update.sh [--skip-macos]"
+            echo "Usage: ./update.sh [--skip-macos] [--no-install]"
+            echo ""
+            echo "Runs install.sh to re-apply configuration, then updates"
+            echo "everything to the latest version."
             echo ""
             echo "Options:"
             echo "  --skip-macos    Skip macOS system updates"
+            echo "  --no-install    Skip the install.sh configuration pass"
             echo "  --help          Show this help message"
             exit 0
             ;;
@@ -60,10 +73,39 @@ source "$DOTFILES_DIR/lib/cooldown.sh"
 
 echo -e "\n${YELLOW}Updating your Mac! 🔄${NC}\n"
 
+###############################################################################
+# Configuration pass
+#
+# install.sh is idempotent and nearly silent on a configured machine, so
+# running it here keeps symlinks, shell wiring and new Brewfile entries in
+# sync without needing a second command. It also runs `brew update` and
+# `brew bundle install`, so we skip those below when it succeeds.
+###############################################################################
+
+BREW_SYNCED=false
+
+if [ "$RUN_INSTALL" = true ]; then
+    print_header "Applying configuration"
+    print_info "Running install.sh (symlinks, shell config, new Brewfile entries)..."
+    echo ""
+    if "$DOTFILES_DIR/install.sh" --no-summary; then
+        BREW_SYNCED=true
+    else
+        print_warning "install.sh reported an error — continuing with updates anyway"
+        print_info "Run ./install.sh on its own to see what failed"
+    fi
+else
+    print_info "Skipping the configuration pass (--no-install)"
+fi
+
 # Update Homebrew
 print_header "Updating Homebrew"
-brew update
-print_success "Homebrew updated"
+if [ "$BREW_SYNCED" = true ]; then
+    print_success "Package index already refreshed by install.sh"
+else
+    brew update
+    print_success "Homebrew updated"
+fi
 
 # Upgrade packages (respecting the release cooldown)
 print_header "Upgrading Homebrew packages (${COOLDOWN_HOURS}h cooldown)"
@@ -121,7 +163,9 @@ fi
 # Install any new packages from Brewfile (new entries respect the cooldown too)
 print_header "Checking Brewfile"
 cd "$DOTFILES_DIR"
-if command_exists jq; then
+if [ "$BREW_SYNCED" = true ]; then
+    print_success "Brewfile already synced by install.sh"
+elif command_exists jq; then
     FILTERED_BREWFILE="$DOTFILES_DIR/.Brewfile.filtered"
     > "$FILTERED_BREWFILE"
     INSTALLED_FORMULAE=" $(brew list --formula 2>/dev/null | tr '\n' ' ') "
@@ -153,14 +197,33 @@ if command_exists jq; then
 
     brew bundle install --file="$FILTERED_BREWFILE"
     rm -f "$FILTERED_BREWFILE"
+    print_success "Brewfile packages synced"
 else
     brew bundle install
+    print_success "Brewfile packages synced"
 fi
-print_success "Brewfile packages synced"
+
+# Update Mac App Store apps (Spark, Xcode) — brew doesn't touch these
+print_header "Updating Mac App Store apps"
+if command_exists mas; then
+    MAS_OUTDATED=$(mas outdated 2>/dev/null || true)
+    if [ -z "$MAS_OUTDATED" ]; then
+        print_success "App Store apps are up to date"
+    else
+        echo "$MAS_OUTDATED"
+        mas upgrade && \
+            print_success "App Store apps updated" || \
+            print_warning "Some App Store updates failed (sign in to the App Store and retry)"
+    fi
+else
+    print_info "mas not installed"
+fi
 
 # Cleanup
 print_header "Cleaning up"
 brew cleanup
+# Drop dependencies nothing needs any more
+brew autoremove
 print_success "Cleanup complete"
 
 # Update Oh My Zsh
@@ -176,8 +239,10 @@ fi
 # Update NVM
 print_header "Updating NVM"
 export NVM_DIR="$HOME/.nvm"
-if [ -s "$NVM_DIR/nvm.sh" ]; then
-    \. "$NVM_DIR/nvm.sh"
+# nvm.sh aborts when npm_config_prefix is set (Zed and some npm setups export
+# it); under `set -e` that would abort the rest of the update
+unset npm_config_prefix
+if [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"; then
     CURRENT_NVM=$(nvm --version)
     print_info "Current NVM version: v$CURRENT_NVM"
 
@@ -206,7 +271,7 @@ if [ -s "$NVM_DIR/nvm.sh" ]; then
     nvm alias default lts/*
     print_success "Node.js updated to: $(node --version)"
 else
-    print_info "NVM not installed"
+    print_info "NVM not installed or failed to load"
 fi
 
 # Update pnpm

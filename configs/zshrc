@@ -45,9 +45,16 @@ alias dc='docker compose'
 alias dps='docker ps'
 alias dimg='docker images'
 
+if command -v lazygit &> /dev/null; then
+    alias lzg='lazygit'
+fi
+
 # Quick edit configs
+# Resolve the dotfiles repo from this file's own location (%x = file being
+# sourced), so the alias follows the clone wherever it lives
+DOTFILES_DIR="${${(%):-%x}:A:h:h}"
 alias zshrc='${EDITOR:-zed} ~/.zshrc'
-alias dotfiles='cd ~/Projects/dotfiles'
+alias dotfiles='cd "$DOTFILES_DIR"'
 
 # ===== Environment Variables =====
 export EDITOR='zed --wait'
@@ -56,3 +63,18 @@ export VISUAL='zed'
 # ===== Path additions =====
 # Add local bin to path (for user-installed binaries)
 export PATH="$HOME/.local/bin:$PATH"
+
+# ===== Zsh plugins (Homebrew) =====
+# Sourced from this file rather than the Oh My Zsh plugins list so they load
+# last. zsh-syntax-highlighting must be sourced after everything that binds
+# widgets, or it silently stops highlighting.
+ZSH_PLUGIN_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}/share"
+
+if [ -f "$ZSH_PLUGIN_PREFIX/zsh-autosuggestions/zsh-autosuggestions.zsh" ]; then
+    source "$ZSH_PLUGIN_PREFIX/zsh-autosuggestions/zsh-autosuggestions.zsh"
+fi
+
+# Keep this last
+if [ -f "$ZSH_PLUGIN_PREFIX/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]; then
+    source "$ZSH_PLUGIN_PREFIX/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+fi

@@ -10,6 +10,7 @@ brew "bat"              # Better cat with syntax highlighting
 brew "fzf"              # Fuzzy finder
 brew "diff-so-fancy"    # Better git diffs
 brew "tig"              # Text-mode interface for git
+brew "lazygit"          # Terminal UI for git
 brew "wget"             # Download utility
 brew "tree"             # Directory structure viewer
 brew "jq"               # JSON processor
@@ -19,12 +20,17 @@ brew "fd"               # Simple, fast alternative to find
 brew "tldr"             # Simplified man pages
 brew "mas"              # Mac App Store CLI (for installing App Store apps)
 
+# Shell (sourced by configs/zshrc, not the Oh My Zsh plugin list)
+brew "zsh-autosuggestions"       # Suggests commands from history as you type
+brew "zsh-syntax-highlighting"   # Highlights valid/invalid commands at the prompt
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # DEVELOPMENT TOOLS (Always installed)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 brew "pyenv"            # Python version manager
 brew "libpq"            # PostgreSQL client tools (psql, pg_dump, pg_restore)
+brew "droast"           # Opinionated Dockerfile linter
 
 # Note: google-cloud-sdk is installed via official installer in install.sh
 # (Homebrew formula is unreliable/deprecated)
@@ -87,7 +93,9 @@ cask "the-unarchiver"   # Extract archives (zip, rar, 7z, tar, etc.)
 # QUICKLOOK PLUGINS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-cask "quicklook-video"  # QuickLook support for webm, mkv, and other video formats (formerly qlvideo)
+cask "quicklook-video"  # QuickLook support for webm, mkv, and other video formats
+# The old "qlvideo" cask is the same plugin under its former name. install.sh
+# removes it if present, so both aren't registered as QuickLook generators.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAC APP STORE (requires being signed into App Store)

@@ -36,11 +36,28 @@ if [ -f "$HOME/.config/ghostty/config" ]; then
     echo -e "${GREEN}✓${NC} Backed up Ghostty config"
 fi
 
+# cp follows symlinks, so this captures the real contents either way
+if [ -f "$HOME/.config/zed/settings.json" ]; then
+    cp "$HOME/.config/zed/settings.json" "$BACKUP_DIR/zed_settings.json"
+    echo -e "${GREEN}✓${NC} Backed up Zed settings"
+fi
+
+if [ -f "$HOME/.ssh/allowed_signers" ]; then
+    cp "$HOME/.ssh/allowed_signers" "$BACKUP_DIR/allowed_signers"
+    echo -e "${GREEN}✓${NC} Backed up SSH allowed_signers"
+fi
+
 # Create a list of installed Homebrew packages
 if command -v brew &> /dev/null; then
     brew list --formula > "$BACKUP_DIR/brew_packages.txt"
     brew list --cask > "$BACKUP_DIR/brew_casks.txt"
     echo -e "${GREEN}✓${NC} Backed up Homebrew package list"
+fi
+
+# Mac App Store apps aren't covered by brew list
+if command -v mas &> /dev/null; then
+    mas list > "$BACKUP_DIR/mas_apps.txt" 2>/dev/null && \
+        echo -e "${GREEN}✓${NC} Backed up Mac App Store app list"
 fi
 
 echo -e "\n${GREEN}Backup complete!${NC}"
