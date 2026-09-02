@@ -21,7 +21,7 @@
   "agent_servers": {
     "claude-acp": {
       "default_config_options": {
-        "mode": "acceptEdits",
+        "mode": "bypassPermissions",
         "model": "default"
       },
       "favorite_config_option_values": {
@@ -31,6 +31,17 @@
         ]
       },
       "type": "registry"
+    }
+  },
+  // clangd from Homebrew's llvm rather than the copy Zed downloads, so the editor
+  // and `clang-tidy` in a project's lint script are the same LLVM version.
+  // Needs compile_commands.json to index a project: `bear -- <build command>`.
+  "lsp": {
+    "clangd": {
+      "binary": {
+        "path": "/opt/homebrew/opt/llvm/bin/clangd",
+        "arguments": ["--background-index", "--header-insertion=never"]
+      }
     }
   },
   "project_panel": {

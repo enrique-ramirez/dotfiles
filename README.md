@@ -50,6 +50,7 @@ cd /path/to/dotfiles
 | `wget` | Download utility |
 | `aria2` | Downloads with BitTorrent/HTTP/FTP support |
 | `mas` | Mac App Store CLI |
+| `duti` | Sets default apps per file type ([used for MIDI](#sheet-music--midi)) |
 | `pyenv` | Python version manager |
 | `libpq` | PostgreSQL client tools (`psql`, `pg_dump`, `pg_restore`) |
 | `droast` | Opinionated Dockerfile linter |
@@ -72,6 +73,9 @@ cd /path/to/dotfiles
 
 **Entertainment:**
 - Spotify, IINA (media player)
+
+**Sheet Music:**
+- MuseScore ([default handler for `.mid`](#sheet-music--midi))
 
 **Utilities:**
 - The Unarchiver, QuickLook Video
@@ -231,6 +235,42 @@ open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibil
 **Zed** settings are managed in this repo at `configs/zed/settings.json` and symlinked to `~/.config/zed/settings.json` by `install.sh`, so they stay in sync across machines via git.
 
 Zed is also the git editor (`core.editor = zed --wait`), so `install.sh` verifies the `zed` CLI is on `PATH` and links it into `/usr/local/bin` if Zed was installed by hand rather than via Homebrew. Without that CLI, every `git commit` and interactive rebase would fail to open an editor.
+
+## Sheet Music & MIDI
+
+Double-clicking a `.mid` file on a stock Mac opens **GarageBand**, because it claims the `public.midi-audio` UTI in LaunchServices. That's a multi-gigabyte DAW for a few KB of note data. `install.sh` reassigns MIDI to **MuseScore** via `duti`:
+
+```bash
+duti -x mid    # verify which app currently handles MIDI
+```
+
+`install.sh` reads the bundle ID out of the installed `MuseScore *.app` rather than hardcoding it, then runs `duti -s <id> <type> all` for `public.midi-audio`, `.mid`, `.midi`, and `.kar`. If MuseScore or `duti` is missing it warns and moves on instead of failing the run.
+
+MuseScore renders the notation *and* plays it with its own bundled sounds, so there's no SoundFont file for this repo to manage.
+
+### Why not a CLI player
+
+`wildmidi` and `timidity` are both in Homebrew, but neither bottle ships instrument samples — they need a GUS patch set wired up by hand and give you no way to *see* a score. Not worth it for double-click playback.
+
+For the record, macOS does have a built-in General MIDI bank at `/System/Library/Components/CoreAudio.component/Contents/Resources/gs_instruments.dls`, usable by anything driving AudioToolbox. VLC's macOS build reaches it through `libaudiotoolboxmidi_plugin.dylib` with no SoundFont configured — but VLC 3.0.23's GUI is unstable on current macOS, so it isn't the handler here.
+
+### Legacy notation formats
+
+Old score files in `.sib` and `.mus` are **not** openable by MuseScore, and there is no free offline conversion path on macOS:
+
+| Format | Magic bytes | Status |
+|---|---|---|
+| `.mid` | `MThd` | ✅ Opens in MuseScore |
+| `.mus` | `ENIGMA BINARY FILE` | ❌ Finale native; Finale discontinued Aug 2024 |
+| `.sib` | `\x0fSIBELIUS` | ❌ Sibelius native, encrypted payload |
+
+Both need MusicXML exported from the originating app. Free Sibelius First cannot export MusicXML (needs paid Sibelius Artist), and pre-2014.5 Finale needs the Dolet plugin. The [`musx2mxl`](https://github.com/joris-vaneyghen/musx2mxl) converter handles Finale's newer `.musx` only, not the older Enigma `.mus`. Online converters exist but require uploading the files.
+
+Check what you're holding before hunting for a converter:
+
+```bash
+head -c 32 score.mus | xxd    # ENIGMA BINARY FILE = Finale
+```
 
 ## Commit Signing
 

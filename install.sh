@@ -128,6 +128,8 @@ cask_app_installed() {
         "quicklook-video") app_name="QuickLook Video" ;;
         "iina") app_name="IINA" ;;
         "the-unarchiver") app_name="The Unarchiver" ;;
+        # Installs as "MuseScore 4.app" — the major version is part of the name
+        "musescore") app_name="MuseScore 4" ;;
         *)
             # Default: Convert dashes to spaces and capitalize each word
             app_name=$(echo "$cask_name" | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))}1')
@@ -1383,6 +1385,44 @@ fi"
 fi
 
 ###############################################################################
+# MIDI File Association
+###############################################################################
+
+print_header "MIDI File Association"
+
+# macOS ships GarageBand claiming public.midi-audio, so double-clicking a .mid
+# fires up a multi-GB DAW. Point MIDI at MuseScore instead: it shows the score
+# and plays it with its own bundled sounds, so there is no SoundFont to manage.
+MUSESCORE_APP=$(ls -d /Applications/MuseScore*.app "$HOME"/Applications/MuseScore*.app 2>/dev/null | head -1)
+
+if [ -z "$MUSESCORE_APP" ]; then
+    print_warning "MuseScore not found (should be installed via Brewfile) - skipping MIDI association"
+elif ! command -v duti &> /dev/null; then
+    print_warning "duti not found (should be installed via Brewfile) - skipping MIDI association"
+else
+    MUSESCORE_ID=$(defaults read "$MUSESCORE_APP/Contents/Info.plist" CFBundleIdentifier 2>/dev/null)
+
+    if [ -z "$MUSESCORE_ID" ]; then
+        print_warning "Could not read MuseScore's bundle ID - skipping MIDI association"
+    elif [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would set $MUSESCORE_ID as the default handler for .mid/.midi/.kar"
+    else
+        # public.midi-audio catches Finder double-clicks; the extensions catch
+        # files LaunchServices happened to type some other way.
+        MIDI_ASSOC_OK=true
+        for midi_type in public.midi-audio .mid .midi .kar; do
+            duti -s "$MUSESCORE_ID" "$midi_type" all 2>/dev/null || MIDI_ASSOC_OK=false
+        done
+
+        if [ "$MIDI_ASSOC_OK" = true ]; then
+            print_success "MIDI files now open in MuseScore (was GarageBand)"
+        else
+            print_warning "Some MIDI associations failed - check with: duti -x mid"
+        fi
+    fi
+fi
+
+###############################################################################
 # Completion
 ###############################################################################
 
@@ -1431,6 +1471,7 @@ echo -e "   ✓ Figma, Slack, ClickUp, Dropbox, Zoom"
 echo -e "   ✓ Spotify, IINA (media player)"
 echo -e "   ✓ QLVideo (QuickLook for webm, mkv, etc.)"
 echo -e "   ✓ aria2 (download/torrent CLI)"
+echo -e "   ✓ MuseScore (opens .mid, replacing GarageBand)"
 echo -e "   ✓ Claude Code (AI coding assistant)"
 echo -e "   ✓ Spark, Xcode (from Mac App Store)"
 echo -e "   ✓ Node.js (via NVM), Python (via pyenv)\n"

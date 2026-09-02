@@ -36,6 +36,20 @@ brew "droast"           # Opinionated Dockerfile linter
 # (Homebrew formula is unreliable/deprecated)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# C / C++ TOOLCHAIN
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# The compiler itself comes from Xcode (see MAC APP STORE below), as does
+# clang-format. clang-tidy does not ship with Xcode, which is the reason for llvm.
+
+brew "llvm"             # clang-tidy and clangd. Keg-only, so not on PATH: scripts
+                        # resolve it with `brew --prefix llvm`, and configs/zed
+                        # points at /opt/homebrew/opt/llvm/bin/clangd
+brew "bear"             # Records a build into compile_commands.json, so clangd can
+                        # index a project that has no build system on this machine
+brew "redocly-cli"      # Lints and bundles OpenAPI documents
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # ESSENTIAL APPLICATIONS (Always installed)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -76,6 +90,13 @@ cask "zoom"
 
 cask "spotify"
 cask "iina"                 # Modern macOS media player (plays everything)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SHEET MUSIC & MIDI
+# ═══════════════════════════════════════════════════════════════════════════════
+
+cask "musescore"        # Notation viewer/player — opens .mid with bundled sounds
+brew "duti"             # Sets default apps per file type (claims .mid for MuseScore)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DOWNLOAD UTILITIES
